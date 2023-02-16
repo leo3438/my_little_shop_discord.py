@@ -81,3 +81,36 @@ def create_payment(price):
         return payment.id
     else:
         return None
+    
+    
+    
+    
+    
+    
+    from discord.ext.menus import Menu, button
+
+class PaymentMenu(Menu):
+    def __init__(self, payment_options):
+        super().__init__(timeout=30.0)
+        self.payment_options = payment_options
+
+    async def send_initial_message(self, ctx, channel):
+        return await channel.send("Choisissez une option de paiement:")
+
+    @button("\N{CREDIT CARD} PayPal", position=0)
+    async def paypal_button(self, payload):
+        await self.message.edit(content="Vous avez choisi PayPal.")
+
+    @button("\N{CREDIT CARD} Stripe", position=1)
+    async def stripe_button(self, payload):
+        await self.message.edit(content="Vous avez choisi Stripe.")
+
+
+
+
+
+@client.command()
+async def choisir_paiement(ctx):
+    payment_options = ["PayPal", "Stripe"]
+    menu = PaymentMenu(payment_options)
+    await menu.start(ctx)
