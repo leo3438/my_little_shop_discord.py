@@ -80,6 +80,40 @@ Au démarrage, le serveur affiche les URLs à utiliser.
 Tinfoil interroge `GET /` (l'index combiné) puis télécharge via
 `/download/ultranx/:id` ou `/download/magicmonkei/:id`.
 
+## Déploiement Docker (ex. ZimaOS, 24h/24)
+
+Le projet inclut un `Dockerfile` (Node.js 22) et un `docker-compose.yml`.
+
+1. Copiez le dépôt (ou juste le dossier `tinfoil-proxy/`) sur le serveur.
+2. Créez le `.env` à côté du `docker-compose.yml` :
+
+   ```bash
+   cp .env.example .env
+   # renseignez vos tokens/identifiants et, IMPORTANT, mettez :
+   #   PUBLIC_BASE_URL=http://IP_DU_ZIMAOS:3001
+   ```
+
+3. Lancez en arrière-plan :
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+Le conteneur écoute en interne sur `3001` et est publié sur `3001` de l'hôte
+(pour éviter tout conflit avec une application déjà sur le port 3000).
+`restart: unless-stopped` le relance automatiquement au démarrage de la machine
+ou après un crash.
+
+Commandes utiles :
+
+```bash
+docker compose logs -f      # suivre les logs
+docker compose down         # arrêter
+docker compose up -d --build   # rebuild + relancer après modification
+```
+
+> Dans Tinfoil, pointez le dépôt vers `IP_DU_ZIMAOS:3001`.
+
 ## Routes
 
 | Méthode | Route                          | Description                                   |
