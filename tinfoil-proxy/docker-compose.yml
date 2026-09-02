@@ -1,7 +1,6 @@
 services:
   tinfoil-proxy:
     build: .
-    image: tinfoil-proxy-aggregator:latest
     container_name: tinfoil-proxy
     # Variables listées explicitement : renseignez-les dans l'éditeur
     # « Environment variables » de la stack Portainer (pas de fichier .env requis).
