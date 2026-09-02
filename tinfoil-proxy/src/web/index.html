@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tinfoil Proxy — Catalogue</title>
+  <title>Tinfoil Proxy — Médiathèque</title>
   <style>
     :root {
       --bg: #0f1115;
@@ -30,14 +30,13 @@
       border-bottom: 1px solid var(--border);
       background: linear-gradient(180deg, #141821, var(--bg));
     }
-    .wrap { max-width: 960px; margin: 0 auto; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
     h1 { margin: 0 0 4px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
     .sub { color: var(--muted); font-size: 13px; }
-    main { max-width: 960px; margin: 0 auto; padding: 16px 20px 60px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 60px; }
 
     .toolbar { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
-    #filter {
-      flex: 1 1 220px;
+    #filter, #console {
       padding: 9px 12px;
       background: var(--panel);
       border: 1px solid var(--border);
@@ -45,19 +44,13 @@
       color: var(--text);
       font-size: 14px;
     }
-    #filter:focus { outline: none; border-color: var(--accent); }
+    #filter { flex: 1 1 220px; }
+    #console { flex: 0 0 auto; max-width: 220px; cursor: pointer; }
+    #filter:focus, #console:focus { outline: none; border-color: var(--accent); }
     .btn {
-      display: inline-block;
-      padding: 8px 14px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      text-decoration: none;
-      white-space: nowrap;
+      display: inline-block; padding: 8px 14px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      text-decoration: none; white-space: nowrap;
     }
     .btn:hover { background: var(--accent-hover); }
     .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
@@ -66,19 +59,29 @@
     .crumbs { font-size: 13px; color: var(--muted); margin-bottom: 10px; min-height: 18px; }
     .crumbs b { color: var(--text); }
 
+    .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
     thead th {
       text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
       color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600;
     }
-    tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: var(--panel-2); }
-    .name { word-break: break-all; }
+    .name { word-break: break-word; min-width: 220px; }
     .name .folder { cursor: pointer; color: var(--accent); text-decoration: none; }
     .name .folder:hover { text-decoration: underline; }
+    .console-cell { color: var(--muted); white-space: nowrap; }
     .size { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
     td.actions { text-align: right; white-space: nowrap; }
+
+    .cover-cell { width: 58px; padding-right: 0; }
+    .cover-img {
+      width: 46px; height: 61px; object-fit: cover; border-radius: 6px; display: block;
+      background: var(--panel-2); box-shadow: 0 1px 3px rgba(0,0,0,.45);
+      opacity: 0; transition: opacity .25s ease;
+    }
+    .cover-img.ready { opacity: 1; }
 
     .badge {
       display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px;
@@ -91,6 +94,7 @@
     .state { text-align: center; color: var(--muted); padding: 40px 10px; }
     .state.error { color: #f87171; }
     .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+    .capped { color: #eab308; }
     a.plain { color: var(--accent); text-decoration: none; }
     a.plain:hover { text-decoration: underline; }
   </style>
@@ -98,14 +102,15 @@
 <body>
   <header>
     <div class="wrap">
-      <h1>🎮 Tinfoil Proxy — Catalogue</h1>
-      <div class="sub">Navigation et téléchargement manuel du dépôt unifié (UltraNX + Magic Monkei).</div>
+      <h1>🎮 Tinfoil Proxy — Médiathèque</h1>
+      <div class="sub">Navigation, jaquettes et téléchargement manuel du dépôt unifié (UltraNX + Magic Monkei).</div>
     </div>
   </header>
 
   <main>
     <div class="toolbar">
       <input id="filter" type="search" placeholder="Filtrer par nom…" autocomplete="off" />
+      <select id="console"><option value="">Toutes les consoles</option></select>
       <button id="reload" class="btn ghost">↻ Rafraîchir</button>
       <span id="count" class="count"></span>
     </div>
@@ -116,13 +121,31 @@
   <script>
     'use strict';
 
-    // Pile de navigation : chaque niveau = { url, title }. La racine est '/'.
+    // Au-delà de ce nombre de lignes, on tronque l'affichage (le DOM n'aime pas
+    // 72 000 lignes). L'utilisateur affine via le filtre nom / la console.
+    const MAX_RENDER = 1500;
+
+    // Placeholder SVG (élégant, sobre) affiché pendant le chargement / si IGDB
+    // ne trouve rien.
+    const PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='92' height='122' viewBox='0 0 92 122'>" +
+      "<rect width='92' height='122' rx='10' fill='#1b1f27'/>" +
+      "<rect x='.5' y='.5' width='91' height='121' rx='9.5' fill='none' stroke='#2a2f3a'/>" +
+      "<g transform='translate(46 54)' fill='none' stroke='#4b5468' stroke-width='3' stroke-linecap='round'>" +
+      "<rect x='-24' y='-12' width='48' height='24' rx='12'/>" +
+      "<line x1='-14' y1='-4' x2='-14' y2='6'/><line x1='-19' y1='1' x2='-9' y2='1'/>" +
+      "<circle cx='13' cy='-2' r='2.6' fill='#4b5468' stroke='none'/>" +
+      "<circle cx='18' cy='3' r='2.6' fill='#4b5468' stroke='none'/></g>" +
+      "<text x='46' y='98' text-anchor='middle' font-family='sans-serif' font-size='9' fill='#5b6473'>jaquette</text></svg>"
+    );
+
     const history = [{ url: '/', title: 'Racine' }];
     let currentItems = { files: [], directories: [] };
+    let coverObserver = null;
+    const coverCache = new Map(); // nom -> url|null (mémoïsation client)
 
     // --- Utilitaires -------------------------------------------------------
 
-    // Formatte une taille en octets de façon lisible.
     function formatSize(bytes) {
       const n = Number(bytes);
       if (!Number.isFinite(n) || n <= 0) return '—';
@@ -132,7 +155,6 @@
       return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
-    // base64url → texte (décodage du token pour retrouver le nom du fichier).
     function b64urlDecode(s) {
       try {
         let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -141,13 +163,10 @@
       } catch { return ''; }
     }
 
-    // À partir d'une URL locale /download|index/<source>/<token>, déduit le
-    // chemin relatif, la source, et le nom lisible. `providedName` (fourni par
-    // le serveur dans l'index) est prioritaire ; sinon on déduit le nom depuis
-    // le token (URL amont encodée) : dernier segment, ou fragment après « # ».
+    // Déduit chemin relatif, source, et nom lisible depuis /download|index/<src>/<token>.
     function describe(rawUrl, providedName) {
-      const path = new URL(rawUrl, location.origin).pathname; // relatif, same-origin
-      const parts = path.split('/').filter(Boolean); // [download|index, source, token]
+      const path = new URL(rawUrl, location.origin).pathname;
+      const parts = path.split('/').filter(Boolean);
       const source = parts[1] || '';
       let name = (providedName || '').trim();
       if (!name) {
@@ -161,9 +180,61 @@
       return { name, source, path };
     }
 
-    const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => (
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
+
+    // --- Jaquettes (lazy-loading via IntersectionObserver) -----------------
+
+    function setupCoverObserver() {
+      if (coverObserver) coverObserver.disconnect();
+      coverObserver = new IntersectionObserver((entries, obs) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          obs.unobserve(e.target);
+          loadCover(e.target);
+        }
+      }, { rootMargin: '300px' });
+    }
+
+    async function loadCover(img) {
+      const name = img.dataset.name;
+      if (!name) return;
+      if (coverCache.has(name)) return applyCover(img, coverCache.get(name));
+      try {
+        const res = await fetch('/api/cover?name=' + encodeURIComponent(name));
+        const data = await res.json();
+        const url = data && data.cover ? data.cover : null;
+        coverCache.set(name, url);
+        applyCover(img, url);
+      } catch { /* garde le placeholder */ }
+    }
+
+    function applyCover(img, url) {
+      if (url) {
+        const real = new Image();
+        real.onload = () => { img.src = url; img.classList.add('ready'); };
+        real.onerror = () => { img.classList.add('ready'); };
+        real.src = url;
+      } else {
+        img.classList.add('ready'); // reste le placeholder, mais visible
+      }
+    }
+
+    // --- Console (menu déroulant dynamique) --------------------------------
+
+    function populateConsoles() {
+      const select = document.getElementById('console');
+      const current = select.value;
+      const consoles = [...new Set(
+        currentItems.files.map((f) => (f.console || '').trim()).filter(Boolean),
+      )].sort((a, b) => a.localeCompare(b, 'fr'));
+      select.innerHTML =
+        '<option value="">Toutes les consoles</option>' +
+        consoles.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+      // Conserve la sélection si elle existe encore.
+      if (consoles.includes(current)) select.value = current;
+    }
 
     // --- Chargement & rendu ------------------------------------------------
 
@@ -178,6 +249,7 @@
           files: Array.isArray(data.files) ? data.files : [],
           directories: Array.isArray(data.directories) ? data.directories : [],
         };
+        populateConsoles();
         render();
       } catch (err) {
         content.innerHTML = `<div class="state error">Échec du chargement : ${escapeHtml(err.message)}</div>`;
@@ -187,23 +259,32 @@
 
     function render() {
       const filter = document.getElementById('filter').value.trim().toLowerCase();
+      const consoleFilter = document.getElementById('console').value;
       const content = document.getElementById('content');
 
-      // Dossiers puis fichiers, chacun décrits et filtrés.
-      const dirs = currentItems.directories
-        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, name: typeof d === 'object' ? (d.name || d.title) : '', size: null, isDir: true }))
+      // Un filtre console masque les dossiers (non rattachés à une console).
+      const dirs = consoleFilter ? [] : currentItems.directories
+        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, name: typeof d === 'object' ? (d.name || d.title) : '', console: '', size: null, isDir: true }))
         .filter((d) => d.raw);
       const files = currentItems.files
-        .map((f) => ({ raw: f.url, name: f.name || f.title || '', size: f.size, isDir: false }))
+        .map((f) => ({ raw: f.url, name: f.name || f.title || '', console: f.console || '', size: f.size, isDir: false }))
         .filter((f) => f.raw);
 
-      const rows = [...dirs, ...files]
+      const all = [...dirs, ...files]
         .map((it) => ({ ...it, ...describe(it.raw, it.name) }))
-        .filter((it) => !filter || it.name.toLowerCase().includes(filter));
+        .filter((it) => !filter || it.name.toLowerCase().includes(filter))
+        .filter((it) => it.isDir || !consoleFilter || it.console === consoleFilter);
+
+      const total = all.length;
+      const rows = all.slice(0, MAX_RENDER);
 
       renderCrumbs();
-      document.getElementById('count').textContent =
-        `${rows.length} élément${rows.length > 1 ? 's' : ''}`;
+      const countEl = document.getElementById('count');
+      if (total > rows.length) {
+        countEl.innerHTML = `<span class="capped">${rows.length} affichés / ${total}</span> — affinez le filtre`;
+      } else {
+        countEl.textContent = `${total} élément${total > 1 ? 's' : ''}`;
+      }
 
       if (rows.length === 0) {
         content.innerHTML = '<div class="state">Aucun élément à afficher.</div>';
@@ -211,6 +292,9 @@
       }
 
       const body = rows.map((it) => {
+        const cover = it.isDir
+          ? '<div style="width:46px"></div>'
+          : `<img class="cover-img" data-name="${escapeHtml(it.name)}" src="${PLACEHOLDER}" alt="" loading="lazy" />`;
         const badge = it.isDir
           ? '<span class="badge dossier">Dossier</span>'
           : `<span class="badge ${it.source}">${escapeHtml(it.source)}</span>`;
@@ -221,23 +305,29 @@
           ? `<button class="btn ghost open" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">Ouvrir</button>`
           : `<a class="btn" href="${escapeHtml(it.path)}">Télécharger</a>`;
         return `<tr>
+          <td class="cover-cell">${cover}</td>
           <td class="name">${name}</td>
+          <td class="console-cell">${escapeHtml(it.console || '')}</td>
           <td>${badge}</td>
           <td class="size">${it.isDir ? '' : formatSize(it.size)}</td>
           <td class="actions">${action}</td>
         </tr>`;
       }).join('');
 
-      content.innerHTML = `<table>
-        <thead><tr><th>Nom</th><th>Source</th><th>Taille</th><th></th></tr></thead>
+      content.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Jaquette</th><th>Nom</th><th>Console</th><th>Source</th><th>Taille</th><th></th></tr></thead>
         <tbody>${body}</tbody>
-      </table>`;
+      </table></div>`;
 
-      // Branche la navigation dans les dossiers.
+      // Navigation dans les dossiers.
       content.querySelectorAll('[data-url]').forEach((el) => {
-        if (el.tagName === 'A' && el.classList.contains('btn')) return; // liens de download
+        if (el.tagName === 'A' && el.classList.contains('btn')) return;
         el.addEventListener('click', () => enterDir(el.dataset.url, el.dataset.title));
       });
+
+      // Lazy-loading des jaquettes : on observe les <img> rendues.
+      setupCoverObserver();
+      content.querySelectorAll('img.cover-img').forEach((img) => coverObserver.observe(img));
     }
 
     function renderCrumbs() {
@@ -252,21 +342,18 @@
       });
     }
 
-    function enterDir(url, title) {
-      history.push({ url, title });
-      load(url);
-    }
-
-    function goTo(idx) {
-      history.splice(idx + 1); // tronque après le niveau cliqué
-      load(history[idx].url);
-    }
+    function enterDir(url, title) { history.push({ url, title }); load(url); }
+    function goTo(idx) { history.splice(idx + 1); load(history[idx].url); }
 
     // --- Événements globaux ------------------------------------------------
-    document.getElementById('filter').addEventListener('input', render);
+    let filterTimer;
+    document.getElementById('filter').addEventListener('input', () => {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(render, 220); // debounce (72k lignes)
+    });
+    document.getElementById('console').addEventListener('change', render);
     document.getElementById('reload').addEventListener('click', () => load(history[history.length - 1].url));
 
-    // Démarrage.
     load('/');
   </script>
 </body>

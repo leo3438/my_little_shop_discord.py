@@ -75,7 +75,9 @@ cp .env.example .env
 | `MAGIC_MONKEI_USER`       | Identifiant Basic Auth Magic Monkei.                       |
 | `MAGIC_MONKEI_PASS`       | Mot de passe Basic Auth Magic Monkei.                      |
 | `ULTRANX_BASE_URL`        | *(optionnel)* base amont, défaut `https://dbi.ultranx.ru/link`. |
-| `MAGIC_MONKEI_INDEX_URL`  | *(optionnel)* défaut `https://shop.magicmonkei.com/tinfoil`. |
+| `MAGIC_MONKEI_INDEX_URL`  | *(optionnel)* défaut `…/tinfoil/shop.tfl`.                 |
+| `IGDB_CLIENT_ID`          | *(optionnel)* app Twitch pour les jaquettes IGDB.          |
+| `IGDB_CLIENT_SECRET`      | *(optionnel)* secret de l'app Twitch.                      |
 
 > Si les identifiants d'une source manquent, cette source est simplement
 > **ignorée** (loggée en warning) et l'autre reste servie.
@@ -100,14 +102,28 @@ Au démarrage, le serveur affiche les URLs à utiliser.
 Tinfoil interroge `GET /` (l'index unifié) puis télécharge via
 `/download/<source>/<token>` (les liens sont déjà réécrits dans l'index).
 
-## Interface web (navigateur, sans Tinfoil)
+## Interface web / médiathèque (navigateur, sans Tinfoil)
 
-Une page web minimaliste (HTML/CSS/Vanilla JS, mode sombre) est servie sur
+Une médiathèque (HTML/CSS/Vanilla JS, mode sombre, aucun build) est servie sur
 **`/web`** — ex. `http://IP_DU_ZIMAOS:3001/web`. Elle appelle l'index unifié
-(`GET /`), affiche les jeux/dossiers dans un tableau (nom, source, taille) avec
-un bouton **Télécharger** pointant vers les routes de proxy existantes, un champ
-de filtre et la navigation dans les sous-dossiers. Aucune dépendance
-supplémentaire, aucun build.
+(`GET /`) et affiche un tableau : **jaquette, nom, console, source, taille** et
+un bouton **Télécharger** (routes de proxy relatives). Fonctionnalités :
+
+- **Filtre par nom** (debounced) et **menu déroulant de consoles** alimenté
+  dynamiquement (nom de la console = dossier parent côté Magic Monkei).
+- **Jaquettes IGDB** chargées en **lazy-loading** (`IntersectionObserver`) :
+  seules les lignes visibles interrogent `/api/cover`, pour éviter le
+  rate-limiting sur des dizaines de milliers de jeux. Un **placeholder** sobre
+  s'affiche pendant le chargement ou si IGDB ne trouve rien.
+- Au-delà de ~1 500 lignes, l'affichage est tronqué (le navigateur ne tient pas
+  72 000 lignes DOM) : affinez via le filtre ou la console.
+
+### Jaquettes IGDB
+
+Renseignez `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` (application Twitch, voir
+`.env.example`). Sans ces variables, la médiathèque reste fonctionnelle et
+affiche le placeholder. Le backend gère l'auth Twitch, la mise en cache du token
+et des résultats, et un limiteur de débit.
 
 ## Déploiement Docker (ex. ZimaOS, 24h/24)
 
@@ -158,7 +174,8 @@ docker compose up -d --build   # rebuild + relancer après modification
 | Méthode | Route                          | Description                                        |
 | ------- | ------------------------------ | -------------------------------------------------- |
 | `GET`   | `/`                            | Index Tinfoil unifié (fusion des 2 sources).       |
-| `GET`   | `/web`                         | Interface web (navigation + téléchargement manuel). |
+| `GET`   | `/web`                         | Médiathèque (jaquettes, consoles, téléchargement). |
+| `GET`   | `/api/cover?name=<jeu>`        | Jaquette IGDB : `{ cover: "https://…"|null }`.      |
 | `GET`   | `/index/:source/:token`        | Sous-index re-proxifié (navigation dans les dossiers). |
 | `GET`   | `/download/:source/:token`     | Streaming du fichier (auth injectée côté serveur). |
 | `GET`   | `/health`                      | Sonde de santé (`{ "status": "ok" }`).             |
