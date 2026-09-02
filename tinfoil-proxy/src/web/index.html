@@ -91,6 +91,31 @@
     .badge.magicmonkei { background: var(--magicmonkei); }
     .badge.dossier { background: #64748b; }
 
+    /* Regroupement (stacking) par Title ID */
+    .stack-caret {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 11px; padding: 0 8px 0 0; transition: transform .15s ease; line-height: 1;
+    }
+    .stack-caret.open { transform: rotate(90deg); color: var(--text); }
+    .stack-caret.spacer { visibility: hidden; cursor: default; }
+    .vbadge {
+      display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700;
+      padding: 1px 7px; border-radius: 999px; background: var(--panel-2);
+      border: 1px solid var(--border); color: var(--muted); vertical-align: middle; white-space: nowrap;
+    }
+    .vbadge.upd { color: #93c5fd; border-color: #31507e; }
+    .vbadge.dlc { color: #fca5a5; border-color: #7e3131; }
+    .drawer-row > td { padding: 0; background: #12151b; }
+    .drawer { padding: 8px 14px 12px 54px; display: flex; flex-direction: column; gap: 7px; }
+    .variant { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .variant .vname { color: var(--muted); flex: 1; word-break: break-word; }
+    .variant .vsize { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .variant .btn { padding: 5px 10px; font-size: 12px; }
+    .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; min-width: 62px; text-align: center; }
+    .tag.base { background: #14532d; color: #bbf7d0; }
+    .tag.update { background: #1e3a8a; color: #bfdbfe; }
+    .tag.dlc { background: #7c2d12; color: #fed7aa; }
+
     .state { text-align: center; color: var(--muted); padding: 40px 10px; }
     .state.error { color: #f87171; }
     .count { color: var(--muted); font-size: 13px; margin-left: auto; }
@@ -143,6 +168,8 @@
     let currentItems = { files: [], directories: [] };
     let coverObserver = null;
     const coverCache = new Map(); // nom -> url|null (mémoïsation client)
+    const expandedGroups = new Set(); // clés de groupes (Title ID base) dépliés
+    let allEntries = []; // entrées regroupées (calculées une fois par chargement)
 
     // --- Utilitaires -------------------------------------------------------
 
@@ -183,6 +210,94 @@
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
+
+    // --- Regroupement par Title ID Nintendo Switch -------------------------
+
+    // Nettoie un titre : retire extension, [titleid], [vN], (Region)…
+    function cleanTitle(name) {
+      return String(name)
+        .replace(/\.[a-z0-9]{2,4}$/i, '')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || String(name);
+    }
+
+    // Title ID = 16 hexa dans le nom (souvent entre crochets, ex. [0100…]).
+    function extractTitleId(name) {
+      const m = String(name).match(/([0-9a-fA-F]{16})/);
+      return m ? m[1].toUpperCase() : '';
+    }
+    function extractVersion(name) {
+      const m = String(name).match(/\[v(\d+)\]/i);
+      return m ? parseInt(m[1], 10) : 0;
+    }
+    // Base du groupe : on efface les 13 bits de poids faible → base, MAJ (…800)
+    // et DLC (…1000+) d'un même jeu partagent la même clé.
+    function baseTitleId(tid) {
+      try { return (BigInt('0x' + tid) & 0xFFFFFFFFFFFFE000n).toString(16).padStart(16, '0').toUpperCase(); }
+      catch { return tid; }
+    }
+    // Type d'après les 13 bits de poids faible : base (0), MAJ (0x800), DLC (≥0x1000).
+    function tidType(tid) {
+      try {
+        const low = BigInt('0x' + tid) & 0x1FFFn;
+        if (low === 0n) return 'base';
+        if (low === 0x800n) return 'update';
+        return 'dlc';
+      } catch { return 'base'; }
+    }
+
+    // Métadonnées d'un fichier de l'index.
+    function fileMeta(f) {
+      const path = new URL(f.url, location.origin).pathname;
+      const source = path.split('/').filter(Boolean)[1] || '';
+      const name = f.name || f.title || describe(f.url, '').name;
+      const titleId = extractTitleId(name);
+      return {
+        url: path, name, source, size: f.size,
+        console: f.console || '', titleId, version: extractVersion(name),
+        type: titleId ? tidType(titleId) : 'base',
+      };
+    }
+
+    // Construit les entrées d'affichage : jeux Switch regroupés par Title ID,
+    // le reste (rétro sans Title ID) en lignes autonomes.
+    function buildEntries(files) {
+      const groups = new Map();
+      const entries = [];
+      for (const f of files) {
+        const m = fileMeta(f);
+        if (!m.titleId) {
+          entries.push({ solo: true, main: m, title: cleanTitle(m.name), console: m.console, source: m.source, variants: [m] });
+          continue;
+        }
+        const key = baseTitleId(m.titleId);
+        let g = groups.get(key);
+        if (!g) { g = { key, all: [] }; groups.set(key, g); entries.push({ group: g }); }
+        g.all.push(m);
+      }
+      for (const e of entries) {
+        if (!e.group) continue;
+        const all = e.group.all;
+        const base = all.find((m) => m.type === 'base');
+        const updates = all.filter((m) => m.type === 'update').sort((a, b) => b.version - a.version);
+        const dlcs = all.filter((m) => m.type === 'dlc');
+        const main = base || updates[0] || all[0];
+        // Variantes ordonnées : base, MAJ (récentes d'abord), DLC.
+        const variants = [...(base ? [base] : []), ...updates, ...dlcs];
+        e.key = e.group.key;
+        e.main = main;
+        e.title = cleanTitle((base || main).name);
+        e.console = main.console;
+        e.source = main.source;
+        e.updates = updates;
+        e.dlcs = dlcs;
+        e.variants = variants;
+        e.latestVersion = updates.length ? updates[0].version : 0;
+      }
+      return entries;
+    }
 
     // --- Jaquettes (lazy-loading via IntersectionObserver) -----------------
 
@@ -249,6 +364,8 @@
           files: Array.isArray(data.files) ? data.files : [],
           directories: Array.isArray(data.directories) ? data.directories : [],
         };
+        expandedGroups.clear();
+        allEntries = buildEntries(currentItems.files);
         populateConsoles();
         render();
       } catch (err) {
@@ -257,61 +374,93 @@
       }
     }
 
+    // Ligne « variante » dans le tiroir (base / MàJ / DLC).
+    function variantRow(v) {
+      const label = v.type === 'update' ? 'MàJ' : v.type === 'dlc' ? 'DLC' : 'Base';
+      return `<div class="variant">
+        <span class="tag ${v.type}">${label}</span>
+        <span class="vname">${escapeHtml(v.name)}</span>
+        <span class="vsize">${formatSize(v.size)}</span>
+        <a class="btn" href="${escapeHtml(v.url)}">Télécharger</a>
+      </div>`;
+    }
+
     function render() {
       const filter = document.getElementById('filter').value.trim().toLowerCase();
       const consoleFilter = document.getElementById('console').value;
       const content = document.getElementById('content');
 
-      // Un filtre console masque les dossiers (non rattachés à une console).
+      // Dossiers (masqués si un filtre console est actif).
       const dirs = consoleFilter ? [] : currentItems.directories
-        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, name: typeof d === 'object' ? (d.name || d.title) : '', console: '', size: null, isDir: true }))
-        .filter((d) => d.raw);
-      const files = currentItems.files
-        .map((f) => ({ raw: f.url, name: f.name || f.title || '', console: f.console || '', size: f.size, isDir: false }))
-        .filter((f) => f.raw);
+        .map((d) => {
+          const raw = typeof d === 'string' ? d : d.url;
+          if (!raw) return null;
+          const info = describe(raw, typeof d === 'object' ? (d.name || d.title) : '');
+          return { isDir: true, path: info.path, name: info.name };
+        })
+        .filter(Boolean)
+        .filter((d) => !filter || d.name.toLowerCase().includes(filter));
 
-      const all = [...dirs, ...files]
-        .map((it) => ({ ...it, ...describe(it.raw, it.name) }))
-        .filter((it) => !filter || it.name.toLowerCase().includes(filter))
-        .filter((it) => it.isDir || !consoleFilter || it.console === consoleFilter);
+      // Jeux regroupés, filtrés par nom (titre ou variante) et par console.
+      const games = allEntries.filter((e) => {
+        if (consoleFilter && e.console !== consoleFilter) return false;
+        if (!filter) return true;
+        if (e.title.toLowerCase().includes(filter)) return true;
+        return e.variants.some((v) => v.name.toLowerCase().includes(filter));
+      });
 
-      const total = all.length;
-      const rows = all.slice(0, MAX_RENDER);
+      const list = [...dirs, ...games];
+      const total = list.length;
+      const shown = list.slice(0, MAX_RENDER);
 
       renderCrumbs();
       const countEl = document.getElementById('count');
-      if (total > rows.length) {
-        countEl.innerHTML = `<span class="capped">${rows.length} affichés / ${total}</span> — affinez le filtre`;
+      if (total > shown.length) {
+        countEl.innerHTML = `<span class="capped">${shown.length} affichés / ${total}</span> — affinez le filtre`;
       } else {
-        countEl.textContent = `${total} élément${total > 1 ? 's' : ''}`;
+        countEl.textContent = `${total} jeu${total > 1 ? 'x' : ''}`;
       }
 
-      if (rows.length === 0) {
+      if (shown.length === 0) {
         content.innerHTML = '<div class="state">Aucun élément à afficher.</div>';
         return;
       }
 
-      const body = rows.map((it) => {
-        const cover = it.isDir
-          ? '<div style="width:46px"></div>'
-          : `<img class="cover-img" data-name="${escapeHtml(it.name)}" src="${PLACEHOLDER}" alt="" loading="lazy" />`;
-        const badge = it.isDir
-          ? '<span class="badge dossier">Dossier</span>'
-          : `<span class="badge ${it.source}">${escapeHtml(it.source)}</span>`;
-        const name = it.isDir
-          ? `<a class="folder" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">📁 ${escapeHtml(it.name)}</a>`
-          : escapeHtml(it.name);
-        const action = it.isDir
-          ? `<button class="btn ghost open" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">Ouvrir</button>`
-          : `<a class="btn" href="${escapeHtml(it.path)}">Télécharger</a>`;
-        return `<tr>
-          <td class="cover-cell">${cover}</td>
-          <td class="name">${name}</td>
-          <td class="console-cell">${escapeHtml(it.console || '')}</td>
-          <td>${badge}</td>
-          <td class="size">${it.isDir ? '' : formatSize(it.size)}</td>
-          <td class="actions">${action}</td>
+      const body = shown.map((it) => {
+        if (it.isDir) {
+          return `<tr>
+            <td class="cover-cell"><div style="width:46px"></div></td>
+            <td class="name"><span class="stack-caret spacer">▶</span><a class="folder" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">📁 ${escapeHtml(it.name)}</a></td>
+            <td class="console-cell"></td>
+            <td><span class="badge dossier">Dossier</span></td>
+            <td class="size"></td>
+            <td class="actions"><button class="btn ghost" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">Ouvrir</button></td>
+          </tr>`;
+        }
+        const e = it;
+        const hasVariants = e.variants.length > 1;
+        const open = expandedGroups.has(e.key);
+        const caret = hasVariants
+          ? `<button class="stack-caret ${open ? 'open' : ''}" data-caret="${escapeHtml(e.key)}" title="Afficher les MàJ / DLC">▶</button>`
+          : '<span class="stack-caret spacer">▶</span>';
+        const badges =
+          (e.latestVersion ? `<span class="vbadge upd">MàJ v${e.latestVersion}</span>` : '') +
+          (e.dlcs.length ? `<span class="vbadge dlc">${e.dlcs.length} DLC</span>` : '') +
+          (e.updates.length ? `<span class="vbadge">${e.updates.length} version${e.updates.length > 1 ? 's' : ''}</span>` : '');
+        const main = `<tr>
+          <td class="cover-cell"><img class="cover-img" data-name="${escapeHtml(e.title)}" src="${PLACEHOLDER}" alt="" loading="lazy" /></td>
+          <td class="name">${caret}${escapeHtml(e.title)}${badges}</td>
+          <td class="console-cell">${escapeHtml(e.console || '')}</td>
+          <td><span class="badge ${e.source}">${escapeHtml(e.source)}</span></td>
+          <td class="size">${formatSize(e.main.size)}</td>
+          <td class="actions"><a class="btn" href="${escapeHtml(e.main.url)}">Télécharger</a></td>
         </tr>`;
+        const drawer = hasVariants
+          ? `<tr class="drawer-row" data-drawer="${escapeHtml(e.key)}" ${open ? '' : 'hidden'}>
+              <td colspan="6"><div class="drawer">${e.variants.map(variantRow).join('')}</div></td>
+            </tr>`
+          : '';
+        return main + drawer;
       }).join('');
 
       content.innerHTML = `<div class="table-wrap"><table>
@@ -320,14 +469,26 @@
       </table></div>`;
 
       // Navigation dans les dossiers.
-      content.querySelectorAll('[data-url]').forEach((el) => {
-        if (el.tagName === 'A' && el.classList.contains('btn')) return;
+      content.querySelectorAll('button[data-url], a.folder[data-url]').forEach((el) => {
         el.addEventListener('click', () => enterDir(el.dataset.url, el.dataset.title));
+      });
+
+      // Dépliage des tiroirs (MàJ / DLC).
+      content.querySelectorAll('.stack-caret[data-caret]').forEach((btn) => {
+        btn.addEventListener('click', () => toggleGroup(btn.dataset.caret, btn));
       });
 
       // Lazy-loading des jaquettes : on observe les <img> rendues.
       setupCoverObserver();
       content.querySelectorAll('img.cover-img').forEach((img) => coverObserver.observe(img));
+    }
+
+    function toggleGroup(key, btn) {
+      const drawer = document.querySelector(`.drawer-row[data-drawer="${CSS.escape(key)}"]`);
+      const open = !expandedGroups.has(key);
+      if (open) expandedGroups.add(key); else expandedGroups.delete(key);
+      btn.classList.toggle('open', open);
+      if (drawer) drawer.hidden = !open;
     }
 
     function renderCrumbs() {
