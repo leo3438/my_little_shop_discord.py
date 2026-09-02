@@ -18,6 +18,11 @@ export const config = {
     process.env.PUBLIC_BASE_URL || `http://localhost:${Number(process.env.PORT) || 3000}`,
   ),
 
+  // User-Agent injecté sur TOUS les appels amont. Le User-Agent Node par défaut
+  // est souvent rejeté (Cloudflare, filtrage). On se fait passer pour Tinfoil ;
+  // surchargeable par un UA de navigateur si une source l'exige.
+  userAgent: process.env.PROXY_USER_AGENT || 'Tinfoil/17.0',
+
   ultranx: {
     // Base DBI : les identifiants font partie du chemin.
     //   https://dbi.ultranx.ru/link/{LOGIN}/{PASSWORD}/
