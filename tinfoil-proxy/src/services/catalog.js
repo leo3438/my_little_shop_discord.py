@@ -1,4 +1,3 @@
-import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { SOURCES, toRef, encodeRef } from './sources.js';
 
@@ -27,11 +26,32 @@ export async function fetchSourceIndex(source, indexUrl = source.indexUrl()) {
 }
 
 /**
- * Construit une URL locale de route pour une URL amont absolue.
+ * Construit un chemin local STRICTEMENT RELATIF (ex. /download/magicmonkei/<token>)
+ * pour une URL amont absolue. On n'injecte volontairement aucun hôte : Tinfoil
+ * comme le navigateur résolvent le chemin contre l'origine réellement utilisée,
+ * ce qui évite les liens cassés du type « .../0.0.0.0/download/... » quand
+ * PUBLIC_BASE_URL est mal renseigné.
  * `toRef` masque au passage les identifiants UltraNX présents dans le chemin.
  */
 const localUrl = (route, source, absoluteUrl) =>
-  `${config.publicBaseUrl}/${route}/${source.key}/${encodeRef(toRef(source, absoluteUrl))}`;
+  `/${route}/${source.key}/${encodeRef(toRef(source, absoluteUrl))}`;
+
+/**
+ * Déduit un nom de fichier lisible à partir de l'URL amont. Les boutiques
+ * Tinfoil placent souvent le nom lisible après un « # » (fragment) ; sinon on
+ * prend le dernier segment du chemin. On décode les %xx au passage.
+ */
+function deriveName(rawUrl) {
+  try {
+    const hash = rawUrl.indexOf('#');
+    let candidate = hash >= 0 ? rawUrl.slice(hash + 1) : rawUrl.split('?')[0];
+    candidate = candidate.split('/').filter(Boolean).pop() || '';
+    try { candidate = decodeURIComponent(candidate); } catch { /* garde brut */ }
+    return candidate.trim();
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Réécrit un index Tinfoil : les `files` pointent vers /download, les
@@ -48,22 +68,26 @@ export function rewriteIndex(source, json, baseUrl) {
 
   const rewrittenFiles = files
     .map((entry) => {
-      const rawUrl = typeof entry === 'string' ? entry : entry?.url;
+      const isString = typeof entry === 'string';
+      const rawUrl = isString ? entry : entry?.url;
       if (!rawUrl) return null;
       const absolute = new URL(rawUrl, baseUrl).href;
       const url = localUrl('download', source, absolute);
-      // On conserve les autres champs (size, etc.) tels quels.
-      return typeof entry === 'string' ? { url } : { ...entry, url };
+      // Nom : on garde name/title s'ils existent, sinon on le déduit de l'URL
+      // amont. Le lien local étant un token opaque, le nom DOIT être fourni ici
+      // (le client ne peut pas le retrouver depuis /download/<src>/<token>).
+      const name = (!isString && (entry.name || entry.title)) || deriveName(absolute);
+      // On conserve les autres champs (size, etc.) et on ajoute `name`.
+      return isString ? { url, name } : { ...entry, url, name };
     })
     .filter(Boolean);
 
+  // `directories` reste au format Tinfoil : un simple tableau de chaînes (URLs).
   const rewrittenDirectories = directories
     .map((entry) => {
       const rawUrl = typeof entry === 'string' ? entry : entry?.url;
       if (!rawUrl) return null;
-      const absolute = new URL(rawUrl, baseUrl).href;
-      const url = localUrl('index', source, absolute);
-      return typeof entry === 'string' ? url : { ...entry, url };
+      return localUrl('index', source, new URL(rawUrl, baseUrl).href);
     })
     .filter(Boolean);
 

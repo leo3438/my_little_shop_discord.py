@@ -142,17 +142,22 @@
     }
 
     // À partir d'une URL locale /download|index/<source>/<token>, déduit le
-    // nom lisible du fichier/dossier et la source.
-    function describe(rawUrl) {
-      const path = new URL(rawUrl, location.origin).pathname; // toujours same-origin
+    // chemin relatif, la source, et le nom lisible. `providedName` (fourni par
+    // le serveur dans l'index) est prioritaire ; sinon on déduit le nom depuis
+    // le token (URL amont encodée) : dernier segment, ou fragment après « # ».
+    function describe(rawUrl, providedName) {
+      const path = new URL(rawUrl, location.origin).pathname; // relatif, same-origin
       const parts = path.split('/').filter(Boolean); // [download|index, source, token]
       const source = parts[1] || '';
-      const ref = b64urlDecode(parts[2] || '');
-      // ref peut être un chemin relatif ou une URL absolue ; on prend le
-      // dernier segment non vide, sans query string.
-      let name = ref.split('?')[0].replace(/\/+$/, '');
-      name = name.split('/').filter(Boolean).pop() || ref || '(sans nom)';
-      try { name = decodeURIComponent(name); } catch { /* garde tel quel */ }
+      let name = (providedName || '').trim();
+      if (!name) {
+        const ref = b64urlDecode(parts[2] || '');
+        const hash = ref.indexOf('#');
+        let cand = hash >= 0 ? ref.slice(hash + 1) : ref.split('?')[0];
+        cand = cand.split('/').filter(Boolean).pop() || '';
+        try { cand = decodeURIComponent(cand); } catch { /* garde brut */ }
+        name = cand.trim() || '(sans nom)';
+      }
       return { name, source, path };
     }
 
@@ -186,14 +191,14 @@
 
       // Dossiers puis fichiers, chacun décrits et filtrés.
       const dirs = currentItems.directories
-        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, size: null, isDir: true }))
+        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, name: typeof d === 'object' ? (d.name || d.title) : '', size: null, isDir: true }))
         .filter((d) => d.raw);
       const files = currentItems.files
-        .map((f) => ({ raw: f.url, size: f.size, isDir: false }))
+        .map((f) => ({ raw: f.url, name: f.name || f.title || '', size: f.size, isDir: false }))
         .filter((f) => f.raw);
 
       const rows = [...dirs, ...files]
-        .map((it) => ({ ...it, ...describe(it.raw) }))
+        .map((it) => ({ ...it, ...describe(it.raw, it.name) }))
         .filter((it) => !filter || it.name.toLowerCase().includes(filter));
 
       renderCrumbs();

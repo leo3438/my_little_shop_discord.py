@@ -6,6 +6,25 @@ import { buildMergedIndex, fetchSourceIndex, rewriteIndex } from '../services/ca
 export const indexRouter = Router();
 
 /**
+ * Journalise TOUS les en-têtes HTTP entrants sur « / ».
+ * Objectif : brancher le vrai DBI de l'utilisateur sur ce proxy, appeler « / »
+ * depuis la Switch, et lire dans les logs Portainer les en-têtes exacts (dont
+ * le fameux Device-Id) que DBI envoie — puis les rejouer vers UltraNX via
+ * ULTRANX_HEADERS.
+ */
+function logIncomingHeaders(req) {
+  const lines = Object.entries(req.headers)
+    .map(([k, v]) => `    ${k}: ${v}`)
+    .join('\n');
+  logger.info(
+    '\n══════════════ EN-TÊTES REÇUS SUR "/" (capture DBI) ══════════════\n' +
+      `    ${req.method} ${req.originalUrl}  —  client ${req.ip}\n` +
+      `${lines}\n` +
+      '══════════════════════════════════════════════════════════════════',
+  );
+}
+
+/**
  * GET /
  * Récupère les index des deux sources (UltraNX via DBI, Magic Monkei via
  * Tinfoil/Basic), fusionne leurs tableaux `files` et `directories`, et renvoie
@@ -13,6 +32,7 @@ export const indexRouter = Router();
  */
 indexRouter.get('/', async (req, res, next) => {
   try {
+    logIncomingHeaders(req);
     logger.info('📄 Construction de l\'index Tinfoil unifié');
     const index = await buildMergedIndex();
     res.json(index);
