@@ -54,6 +54,22 @@ function deriveName(rawUrl) {
 }
 
 /**
+ * Déduit le nom de la console à partir du dossier PARENT du fichier dans l'URL
+ * amont (ex. « Atari 2600 » dans /.../Atari%202600/jeu.zip). Utilisé pour Magic
+ * Monkei, dont le catalogue est organisé par console.
+ */
+function deriveConsole(absoluteUrl) {
+  try {
+    const segs = new URL(absoluteUrl).pathname.split('/').filter(Boolean);
+    if (segs.length < 2) return '';
+    const parent = segs[segs.length - 2];
+    try { return decodeURIComponent(parent).trim(); } catch { return parent; }
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Réécrit un index Tinfoil : les `files` pointent vers /download, les
  * `directories` vers /index (sous-index re-proxifiés récursivement).
  *
@@ -77,8 +93,14 @@ export function rewriteIndex(source, json, baseUrl) {
       // amont. Le lien local étant un token opaque, le nom DOIT être fourni ici
       // (le client ne peut pas le retrouver depuis /download/<src>/<token>).
       const name = (!isString && (entry.name || entry.title)) || deriveName(absolute);
-      // On conserve les autres champs (size, etc.) et on ajoute `name`.
-      return isString ? { url, name } : { ...entry, url, name };
+      // Console : dossier parent pour Magic Monkei (catalogue multi-consoles),
+      // « Nintendo Switch » pour UltraNX.
+      const consoleName =
+        source.key === 'magicmonkei' ? deriveConsole(absolute) : 'Nintendo Switch';
+      // On conserve les autres champs (size, etc.) et on ajoute name/console.
+      return isString
+        ? { url, name, console: consoleName }
+        : { ...entry, url, name, console: consoleName };
     })
     .filter(Boolean);
 

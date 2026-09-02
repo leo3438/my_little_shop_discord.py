@@ -62,6 +62,13 @@ export const config = {
     user: process.env.MAGIC_MONKEI_USER || '',
     pass: process.env.MAGIC_MONKEI_PASS || '',
   },
+
+  // IGDB (jaquettes) — authentification via Twitch (client_credentials).
+  // Laissez vide pour désactiver : l'UI affichera alors le placeholder.
+  igdb: {
+    clientId: process.env.IGDB_CLIENT_ID || '',
+    clientSecret: process.env.IGDB_CLIENT_SECRET || '',
+  },
 };
 
 /**

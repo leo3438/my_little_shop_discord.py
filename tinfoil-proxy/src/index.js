@@ -5,6 +5,7 @@ import { config, warnMissingSecrets } from './config.js';
 import { logger } from './logger.js';
 import { indexRouter } from './routes/index.js';
 import { downloadRouter } from './routes/download.js';
+import { apiRouter } from './routes/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -20,6 +21,9 @@ app.use('/', indexRouter);
 
 // Routes de proxy/streaming des téléchargements.
 app.use('/download', downloadRouter);
+
+// API interne du frontend (jaquettes IGDB…).
+app.use('/api', apiRouter);
 
 // Interface web minimaliste : navigation + téléchargement manuel via navigateur.
 app.get('/web', (req, res) => res.sendFile(path.join(__dirname, 'web', 'index.html')));

@@ -15,6 +15,9 @@ services:
       # Magic Monkei (façon Tinfoil) : authentification HTTP Basic.
       - MAGIC_MONKEI_USER=${MAGIC_MONKEI_USER}
       - MAGIC_MONKEI_PASS=${MAGIC_MONKEI_PASS}
+      # Jaquettes IGDB (facultatif). Laisser vide désactive proprement l'appel.
+      - IGDB_CLIENT_ID=${IGDB_CLIENT_ID:-}
+      - IGDB_CLIENT_SECRET=${IGDB_CLIENT_SECRET:-}
     # hôte:conteneur — 3001 côté ZimaOS pour éviter le conflit avec le port 3000.
     ports:
       - "3001:3001"
