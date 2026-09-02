@@ -2,8 +2,12 @@ import 'dotenv/config';
 
 /**
  * Centralise et valide la configuration issue des variables d'environnement.
- * Toute la configuration sensible (tokens, identifiants) transite par le .env
- * afin de ne jamais apparaître dans le code.
+ * Tous les identifiants transitent par le .env afin de ne jamais apparaître
+ * dans le code.
+ *
+ * Nouveau modèle d'authentification (connexion directe, sans cookie) :
+ *   - UltraNX     : identifiants injectés dans le chemin de l'URL (façon DBI).
+ *   - MagicMonkei : en-tête HTTP Basic (façon Tinfoil).
  */
 
 const stripTrailingSlash = (value = '') => value.replace(/\/+$/, '');
@@ -15,34 +19,35 @@ export const config = {
   ),
 
   ultranx: {
-    apiBase: stripTrailingSlash(process.env.ULTRANX_API_BASE || 'https://api.ultranx.example.com'),
-    authToken: process.env.ULTRANX_AUTH_TOKEN || '',
+    // Base DBI : les identifiants font partie du chemin.
+    //   https://dbi.ultranx.ru/link/{LOGIN}/{PASSWORD}/
+    baseUrl: stripTrailingSlash(process.env.ULTRANX_BASE_URL || 'https://dbi.ultranx.ru/link'),
+    login: process.env.ULTRANX_LOGIN || '',
+    password: process.env.ULTRANX_PASSWORD || '',
   },
 
   magicMonkei: {
-    apiBase: stripTrailingSlash(
-      process.env.MAGIC_MONKEI_API_BASE || 'https://cyberfoil.magicmonkei.com',
-    ),
+    // Index Tinfoil protégé par authentification HTTP Basic.
+    indexUrl: process.env.MAGIC_MONKEI_INDEX_URL || 'https://shop.magicmonkei.com/tinfoil',
     user: process.env.MAGIC_MONKEI_USER || '',
     pass: process.env.MAGIC_MONKEI_PASS || '',
   },
 };
 
 /**
- * Avertit (sans bloquer) si des secrets ne sont pas renseignés : pratique pour
- * tester l'architecture de routage avec les jeux mockés avant d'avoir les
- * vrais identifiants.
+ * Avertit (sans bloquer) si des identifiants ne sont pas renseignés.
  */
 export function warnMissingSecrets(logger) {
   const missing = [];
-  if (!config.ultranx.authToken) missing.push('ULTRANX_AUTH_TOKEN');
+  if (!config.ultranx.login) missing.push('ULTRANX_LOGIN');
+  if (!config.ultranx.password) missing.push('ULTRANX_PASSWORD');
   if (!config.magicMonkei.user) missing.push('MAGIC_MONKEI_USER');
   if (!config.magicMonkei.pass) missing.push('MAGIC_MONKEI_PASS');
 
   if (missing.length > 0) {
     logger.warn(
-      `Secrets manquants dans .env : ${missing.join(', ')}. ` +
-        "L'agrégation d'index fonctionne, mais les téléchargements réels échoueront.",
+      `Identifiants manquants dans .env : ${missing.join(', ')}. ` +
+        'Les sources concernées renverront une erreur tant qu\'ils ne sont pas fournis.',
     );
   }
 }

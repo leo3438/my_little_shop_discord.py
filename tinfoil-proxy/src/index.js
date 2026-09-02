@@ -35,9 +35,10 @@ app.use((err, req, res, next) => {
 app.listen(config.port, () => {
   logger.info('==================================================================');
   logger.info('  Proxy/agrégateur Tinfoil démarré');
-  logger.info(`  Index Tinfoil   : ${config.publicBaseUrl}/`);
-  logger.info(`  UltraNX          : ${config.publicBaseUrl}/download/ultranx/:id`);
-  logger.info(`  Magic Monkei     : ${config.publicBaseUrl}/download/magicmonkei/:id`);
+  logger.info(`  Index unifié     : ${config.publicBaseUrl}/`);
+  logger.info(`  Téléchargements  : ${config.publicBaseUrl}/download/:source/:token`);
+  logger.info(`  Sous-index       : ${config.publicBaseUrl}/index/:source/:token`);
+  logger.info(`  Sources          : UltraNX (DBI) + Magic Monkei (Tinfoil/Basic)`);
   logger.info(`  Écoute locale    : port ${config.port}`);
   logger.info('==================================================================');
   warnMissingSecrets(logger);

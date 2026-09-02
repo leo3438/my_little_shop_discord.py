@@ -4,14 +4,22 @@ Serveur **Node.js / Express** qui unifie deux sources privées
 (**UltraNX** et **Magic Monkei**) en un **seul dépôt Tinfoil transparent**
 pour Nintendo Switch.
 
-- Génère un index JSON combiné compatible Tinfoil (`files` + `directories`).
-- Fait un **stream/pipe direct, octet par octet**, des téléchargements, en
-  conservant les en-têtes d'origine (`Content-Length`, `Content-Disposition`…).
-- Injecte automatiquement les identifiants requis par chaque source :
-  - **UltraNX** → en-tête `Cookie: auth_token=…`
-  - **Magic Monkei** → en-tête `Authorization: Basic …`
+Le proxy se connecte aux sources **exactement comme les applications
+officielles** (DBI pour UltraNX, Tinfoil pour Magic Monkei) :
 
-La Switch ne voit qu'un seul dépôt ; les secrets restent sur le serveur.
+- Récupère l'index JSON réel de **chaque** source, **réécrit** tous les liens
+  pour qu'ils pointent vers ce proxy, puis **fusionne** les tableaux `files` et
+  `directories` en un seul index Tinfoil.
+- Fait un **stream/pipe direct, octet par octet**, des téléchargements, en
+  conservant les en-têtes d'origine (`Content-Length`, `Content-Disposition`…)
+  et en supportant le header `Range` (reprise de téléchargement).
+- Authentification directe injectée automatiquement, propre à chaque source :
+  - **UltraNX (façon DBI)** → identifiants dans le chemin de l'URL amont :
+    `https://dbi.ultranx.ru/link/{LOGIN}/{PASSWORD}/`
+  - **Magic Monkei (façon Tinfoil)** → en-tête `Authorization: Basic …`
+
+La Switch ne voit qu'un seul dépôt ; les identifiants restent sur le serveur et
+ne sont **jamais** exposés dans les liens réécrits.
 
 ## Architecture
 
@@ -24,11 +32,23 @@ tinfoil-proxy/
     ├── config.js           # chargement + validation du .env
     ├── logger.js           # logs console horodatés
     ├── routes/
-    │   ├── index.js        # GET /            → index Tinfoil combiné
-    │   └── download.js     # GET /download/*  → proxys UltraNX & Magic Monkei
+    │   ├── index.js        # GET /  (index unifié) + GET /index/:src/:token
+    │   └── download.js     # GET /download/:src/:token  (streaming)
     └── services/
+        ├── sources.js      # définition des 2 sources, auth, tokens, SSRF guard
+        ├── catalog.js      # récupération + réécriture + fusion des index
         └── proxy.js        # streaming générique (fetch → pipe vers le client)
 ```
+
+### Comment les liens sont réécrits
+
+L'URL amont réelle de chaque fichier/dossier est encodée dans un **token
+base64url** placé dans le lien local (`/download/<src>/<token>`). Au
+téléchargement, le proxy décode ce token, reconstruit l'URL amont, **vérifie que
+l'hôte est bien celui de la source** (protection anti-SSRF/fuite d'identifiants)
+puis stream le fichier avec l'authentification adéquate. Pour UltraNX, le
+segment `login/password` est retiré du token afin de ne pas divulguer les
+identifiants côté client.
 
 ## Prérequis
 
@@ -46,19 +66,19 @@ cp .env.example .env
 
 ## Configuration (`.env`)
 
-| Variable                | Rôle                                                        |
-| ----------------------- | ----------------------------------------------------------- |
-| `PORT`                  | Port d'écoute local (par défaut `3000`).                    |
-| `PUBLIC_BASE_URL`       | URL joignable depuis la Switch (ex. `http://192.168.1.50:3000`). |
-| `ULTRANX_API_BASE`      | Base de l'API distante UltraNX.                            |
-| `ULTRANX_AUTH_TOKEN`    | Cookie réseau UltraNX (`auth_token`).                      |
-| `MAGIC_MONKEI_API_BASE` | Base de l'API distante Magic Monkei.                       |
-| `MAGIC_MONKEI_USER`     | Identifiant Basic Auth Magic Monkei.                       |
-| `MAGIC_MONKEI_PASS`     | Mot de passe Basic Auth Magic Monkei.                      |
+| Variable                  | Rôle                                                        |
+| ------------------------- | ----------------------------------------------------------- |
+| `PORT`                    | Port d'écoute local (par défaut `3000`).                   |
+| `PUBLIC_BASE_URL`         | URL joignable depuis la Switch (ex. `http://192.168.1.50:3001`). |
+| `ULTRANX_LOGIN`           | Login UltraNX (injecté dans le chemin façon DBI).          |
+| `ULTRANX_PASSWORD`        | Mot de passe UltraNX.                                       |
+| `MAGIC_MONKEI_USER`       | Identifiant Basic Auth Magic Monkei.                       |
+| `MAGIC_MONKEI_PASS`       | Mot de passe Basic Auth Magic Monkei.                      |
+| `ULTRANX_BASE_URL`        | *(optionnel)* base amont, défaut `https://dbi.ultranx.ru/link`. |
+| `MAGIC_MONKEI_INDEX_URL`  | *(optionnel)* défaut `https://shop.magicmonkei.com/tinfoil`. |
 
-> Les jeux de l'index sont **mockés** pour tester le routage ; l'agrégation
-> fonctionne même sans secrets, mais les téléchargements réels échoueront tant
-> que les identifiants ne sont pas renseignés.
+> Si les identifiants d'une source manquent, cette source est simplement
+> **ignorée** (loggée en warning) et l'autre reste servie.
 
 ## Lancement
 
@@ -77,8 +97,8 @@ Au démarrage, le serveur affiche les URLs à utiliser.
 4. Laissez Username / Password **vides** : l'authentification est gérée par le
    proxy, pas par Tinfoil.
 
-Tinfoil interroge `GET /` (l'index combiné) puis télécharge via
-`/download/ultranx/:id` ou `/download/magicmonkei/:id`.
+Tinfoil interroge `GET /` (l'index unifié) puis télécharge via
+`/download/<source>/<token>` (les liens sont déjà réécrits dans l'index).
 
 ## Déploiement Docker (ex. ZimaOS, 24h/24)
 
@@ -116,21 +136,23 @@ docker compose up -d --build   # rebuild + relancer après modification
 
 ## Routes
 
-| Méthode | Route                          | Description                                   |
-| ------- | ------------------------------ | --------------------------------------------- |
-| `GET`   | `/`                            | Index Tinfoil combiné (JSON).                 |
-| `GET`   | `/download/ultranx/:id`        | Proxy UltraNX (injecte le Cookie).            |
-| `GET`   | `/download/magicmonkei/:id`    | Proxy Magic Monkei (injecte le Basic Auth).   |
-| `GET`   | `/health`                      | Sonde de santé (`{ "status": "ok" }`).        |
+| Méthode | Route                          | Description                                        |
+| ------- | ------------------------------ | -------------------------------------------------- |
+| `GET`   | `/`                            | Index Tinfoil unifié (fusion des 2 sources).       |
+| `GET`   | `/index/:source/:token`        | Sous-index re-proxifié (navigation dans les dossiers). |
+| `GET`   | `/download/:source/:token`     | Streaming du fichier (auth injectée côté serveur). |
+| `GET`   | `/health`                      | Sonde de santé (`{ "status": "ok" }`).             |
+
+`:source` vaut `ultranx` ou `magicmonkei`.
 
 ## Test rapide
 
 ```bash
-# Index combiné
+# Index unifié (récupère et fusionne les deux sources)
 curl http://localhost:3000/
 
-# Route mockée UltraNX (échoue proprement si le token n'est pas configuré)
-curl -v http://localhost:3000/download/ultranx/12345
+# Les liens de téléchargement sont fournis directement dans cet index ;
+# il suffit de les suivre (curl -L) pour lancer le stream.
 ```
 
 ## Notes

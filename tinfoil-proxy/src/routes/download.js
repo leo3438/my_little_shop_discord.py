@@ -1,61 +1,45 @@
 import { Router } from 'express';
-import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { getSource, resolveTarget } from '../services/sources.js';
 import { streamRemote } from '../services/proxy.js';
 
 export const downloadRouter = Router();
 
 /**
- * GET /download/ultranx/:id
- * Proxy vers UltraNX. Injecte OBLIGATOIREMENT le cookie réseau :
- *     Cookie: auth_token=VALEUR_DU_TOKEN
+ * GET /download/:source/:token
+ * Route de téléchargement unifiée pour les deux sources.
+ *
+ * Le token encode l'URL amont réelle du fichier (masquée dans l'index). On la
+ * reconstruit, on vérifie que l'hôte est autorisé, puis on stream/pipe le
+ * fichier vers le client avec l'authentification propre à la source :
+ *   - UltraNX     : identifiants dans le chemin (aucun en-tête).
+ *   - MagicMonkei : en-tête Authorization: Basic.
+ *
+ * Le header `Range` est propagé (reprise de téléchargement) par streamRemote.
  */
-downloadRouter.get('/ultranx/:id', async (req, res) => {
-  const { id } = req.params;
-
-  if (!config.ultranx.authToken) {
-    logger.error('[UltraNX] ULTRANX_AUTH_TOKEN absent : téléchargement impossible');
-    return res.status(500).json({ error: 'ULTRANX_AUTH_TOKEN non configuré' });
+downloadRouter.get('/:source/:token', async (req, res) => {
+  const source = getSource(req.params.source);
+  if (!source) {
+    return res.status(404).json({ error: 'Source inconnue', source: req.params.source });
+  }
+  if (!source.configured()) {
+    logger.error(`[${source.name}] ${source.missingMsg}`);
+    return res.status(500).json({ error: source.missingMsg });
   }
 
-  const url = `${config.ultranx.apiBase}/download/${encodeURIComponent(id)}`;
-
-  await streamRemote({
-    source: 'UltraNX',
-    id,
-    url,
-    headers: {
-      Cookie: `auth_token=${config.ultranx.authToken}`,
-    },
-    req,
-    res,
-  });
-});
-
-/**
- * GET /download/magicmonkei/:id
- * Proxy vers Magic Monkei (cyberfoil.magicmonkei.com). Injecte OBLIGATOIREMENT
- * l'authentification HTTP Basic construite à partir de MAGIC_MONKEI_USER/PASS.
- */
-downloadRouter.get('/magicmonkei/:id', async (req, res) => {
-  const { id } = req.params;
-  const { user, pass } = config.magicMonkei;
-
-  if (!user || !pass) {
-    logger.error('[MagicMonkei] Identifiants absents : téléchargement impossible');
-    return res.status(500).json({ error: 'MAGIC_MONKEI_USER / MAGIC_MONKEI_PASS non configurés' });
+  let url;
+  try {
+    url = resolveTarget(source, req.params.token);
+  } catch (err) {
+    logger.error(`[${source.name}] Token invalide : ${err.message}`);
+    return res.status(err.statusCode || 400).json({ error: err.message });
   }
 
-  const url = `${config.magicMonkei.apiBase}/download/${encodeURIComponent(id)}`;
-  const basic = Buffer.from(`${user}:${pass}`).toString('base64');
-
   await streamRemote({
-    source: 'MagicMonkei',
-    id,
+    source: source.name,
+    id: req.params.token.slice(0, 12) + '…',
     url,
-    headers: {
-      Authorization: `Basic ${basic}`,
-    },
+    headers: source.authHeaders(),
     req,
     res,
   });
