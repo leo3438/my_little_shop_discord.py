@@ -1,5 +1,6 @@
 import { logger } from '../logger.js';
 import { SOURCES, toRef, encodeRef } from './sources.js';
+import { recognizeConsole } from './consoles.js';
 
 /**
  * Récupère et fusionne les index Tinfoil des deux sources.
@@ -55,15 +56,17 @@ function deriveName(rawUrl) {
 
 /**
  * Déduit le nom de la console à partir du dossier PARENT du fichier dans l'URL
- * amont (ex. « Atari 2600 » dans /.../Atari%202600/jeu.zip). Utilisé pour Magic
- * Monkei, dont le catalogue est organisé par console.
+ * amont (ex. « Atari 2600 » dans /.../Atari%202600/jeu.zip). La structure Magic
+ * Monkei n'étant pas uniforme, on ne retient que les plateformes reconnues
+ * (recognizeConsole) : les faux positifs (titres de jeux, balises) sont ignorés.
  */
 function deriveConsole(absoluteUrl) {
   try {
     const segs = new URL(absoluteUrl).pathname.split('/').filter(Boolean);
     if (segs.length < 2) return '';
-    const parent = segs[segs.length - 2];
-    try { return decodeURIComponent(parent).trim(); } catch { return parent; }
+    let parent = segs[segs.length - 2];
+    try { parent = decodeURIComponent(parent); } catch { /* garde brut */ }
+    return recognizeConsole(parent);
   } catch {
     return '';
   }
