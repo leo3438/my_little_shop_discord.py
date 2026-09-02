@@ -3,13 +3,19 @@ services:
     build: .
     image: tinfoil-proxy-aggregator:latest
     container_name: tinfoil-proxy
-    # Charge tokens et identifiants depuis le fichier .env (voir .env.example).
-    env_file:
-      - .env
-    # Force le port applicatif à 3001 quel que soit le PORT du .env,
-    # afin qu'il corresponde au mapping ci-dessous.
+    # Variables listées explicitement : renseignez-les dans l'éditeur
+    # « Environment variables » de la stack Portainer (pas de fichier .env requis).
     environment:
+      # Port applicatif interne, aligné sur le mapping ports ci-dessous.
       - PORT=3001
+      # URL publique joignable depuis la Switch, ex. http://IP_DU_ZIMAOS:3001
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      # UltraNX (façon DBI) : identifiants injectés dans le chemin de l'URL.
+      - ULTRANX_LOGIN=${ULTRANX_LOGIN}
+      - ULTRANX_PASSWORD=${ULTRANX_PASSWORD}
+      # Magic Monkei (façon Tinfoil) : authentification HTTP Basic.
+      - MAGIC_MONKEI_USER=${MAGIC_MONKEI_USER}
+      - MAGIC_MONKEI_PASS=${MAGIC_MONKEI_PASS}
     # hôte:conteneur — 3001 côté ZimaOS pour éviter le conflit avec le port 3000.
     ports:
       - "3001:3001"

@@ -104,20 +104,30 @@ Tinfoil interroge `GET /` (l'index unifié) puis télécharge via
 
 Le projet inclut un `Dockerfile` (Node.js 22) et un `docker-compose.yml`.
 
-1. Copiez le dépôt (ou juste le dossier `tinfoil-proxy/`) sur le serveur.
-2. Créez le `.env` à côté du `docker-compose.yml` :
+Le `docker-compose.yml` ne dépend **pas** d'un fichier `.env` (qui n'est pas
+versionné) : les variables sont listées explicitement et injectées à
+l'exécution. Renseignez leurs valeurs selon votre méthode de déploiement.
 
-   ```bash
-   cp .env.example .env
-   # renseignez vos tokens/identifiants et, IMPORTANT, mettez :
-   #   PUBLIC_BASE_URL=http://IP_DU_ZIMAOS:3001
-   ```
+### Via Portainer (Stacks)
 
-3. Lancez en arrière-plan :
+1. **Stacks** → **Add stack**, chargez ce dépôt (ou collez le compose).
+2. Dans **Environment variables**, ajoutez les 5 variables :
+   `PUBLIC_BASE_URL` (ex. `http://IP_DU_ZIMAOS:3001`), `ULTRANX_LOGIN`,
+   `ULTRANX_PASSWORD`, `MAGIC_MONKEI_USER`, `MAGIC_MONKEI_PASS`.
+3. **Deploy the stack**.
 
-   ```bash
-   docker compose up -d --build
-   ```
+### Via la ligne de commande
+
+```bash
+cd tinfoil-proxy
+PUBLIC_BASE_URL=http://IP_DU_ZIMAOS:3001 \
+ULTRANX_LOGIN=xxx ULTRANX_PASSWORD=xxx \
+MAGIC_MONKEI_USER=xxx MAGIC_MONKEI_PASS=xxx \
+docker compose up -d --build
+```
+
+> Astuce : `docker compose` charge aussi automatiquement un fichier `.env`
+> présent dans le dossier, si vous préférez y mettre ces variables.
 
 Le conteneur écoute en interne sur `3001` et est publié sur `3001` de l'hôte
 (pour éviter tout conflit avec une application déjà sur le port 3000).
