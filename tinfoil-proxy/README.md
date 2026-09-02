@@ -100,6 +100,15 @@ Au démarrage, le serveur affiche les URLs à utiliser.
 Tinfoil interroge `GET /` (l'index unifié) puis télécharge via
 `/download/<source>/<token>` (les liens sont déjà réécrits dans l'index).
 
+## Interface web (navigateur, sans Tinfoil)
+
+Une page web minimaliste (HTML/CSS/Vanilla JS, mode sombre) est servie sur
+**`/web`** — ex. `http://IP_DU_ZIMAOS:3001/web`. Elle appelle l'index unifié
+(`GET /`), affiche les jeux/dossiers dans un tableau (nom, source, taille) avec
+un bouton **Télécharger** pointant vers les routes de proxy existantes, un champ
+de filtre et la navigation dans les sous-dossiers. Aucune dépendance
+supplémentaire, aucun build.
+
 ## Déploiement Docker (ex. ZimaOS, 24h/24)
 
 Le projet inclut un `Dockerfile` (Node.js 22) et un `docker-compose.yml`.
@@ -149,6 +158,7 @@ docker compose up -d --build   # rebuild + relancer après modification
 | Méthode | Route                          | Description                                        |
 | ------- | ------------------------------ | -------------------------------------------------- |
 | `GET`   | `/`                            | Index Tinfoil unifié (fusion des 2 sources).       |
+| `GET`   | `/web`                         | Interface web (navigation + téléchargement manuel). |
 | `GET`   | `/index/:source/:token`        | Sous-index re-proxifié (navigation dans les dossiers). |
 | `GET`   | `/download/:source/:token`     | Streaming du fichier (auth injectée côté serveur). |
 | `GET`   | `/health`                      | Sonde de santé (`{ "status": "ok" }`).             |

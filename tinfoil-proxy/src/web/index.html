@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tinfoil Proxy — Catalogue</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1e222b;
+      --border: #2a2f3a;
+      --text: #e6e8ec;
+      --muted: #9aa3b2;
+      --accent: #4f8cff;
+      --accent-hover: #3a78f0;
+      --ultranx: #8b5cf6;
+      --magicmonkei: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #141821, var(--bg));
+    }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+    .sub { color: var(--muted); font-size: 13px; }
+    main { max-width: 960px; margin: 0 auto; padding: 16px 20px 60px; }
+
+    .toolbar { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
+    #filter {
+      flex: 1 1 220px;
+      padding: 9px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    #filter:focus { outline: none; border-color: var(--accent); }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    .btn.ghost:hover { background: var(--border); }
+
+    .crumbs { font-size: 13px; color: var(--muted); margin-bottom: 10px; min-height: 18px; }
+    .crumbs b { color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
+    thead th {
+      text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+      color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600;
+    }
+    tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--panel-2); }
+    .name { word-break: break-all; }
+    .name .folder { cursor: pointer; color: var(--accent); text-decoration: none; }
+    .name .folder:hover { text-decoration: underline; }
+    .size { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    td.actions { text-align: right; white-space: nowrap; }
+
+    .badge {
+      display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px;
+      border-radius: 999px; color: #fff; text-transform: uppercase; letter-spacing: .03em;
+    }
+    .badge.ultranx { background: var(--ultranx); }
+    .badge.magicmonkei { background: var(--magicmonkei); }
+    .badge.dossier { background: #64748b; }
+
+    .state { text-align: center; color: var(--muted); padding: 40px 10px; }
+    .state.error { color: #f87171; }
+    .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+    a.plain { color: var(--accent); text-decoration: none; }
+    a.plain:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>🎮 Tinfoil Proxy — Catalogue</h1>
+      <div class="sub">Navigation et téléchargement manuel du dépôt unifié (UltraNX + Magic Monkei).</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="filter" type="search" placeholder="Filtrer par nom…" autocomplete="off" />
+      <button id="reload" class="btn ghost">↻ Rafraîchir</button>
+      <span id="count" class="count"></span>
+    </div>
+    <div id="crumbs" class="crumbs"></div>
+    <div id="content"><div class="state">Chargement du catalogue…</div></div>
+  </main>
+
+  <script>
+    'use strict';
+
+    // Pile de navigation : chaque niveau = { url, title }. La racine est '/'.
+    const history = [{ url: '/', title: 'Racine' }];
+    let currentItems = { files: [], directories: [] };
+
+    // --- Utilitaires -------------------------------------------------------
+
+    // Formatte une taille en octets de façon lisible.
+    function formatSize(bytes) {
+      const n = Number(bytes);
+      if (!Number.isFinite(n) || n <= 0) return '—';
+      const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+      let i = 0, v = n;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+    }
+
+    // base64url → texte (décodage du token pour retrouver le nom du fichier).
+    function b64urlDecode(s) {
+      try {
+        let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        return decodeURIComponent(escape(atob(b64)));
+      } catch { return ''; }
+    }
+
+    // À partir d'une URL locale /download|index/<source>/<token>, déduit le
+    // nom lisible du fichier/dossier et la source.
+    function describe(rawUrl) {
+      const path = new URL(rawUrl, location.origin).pathname; // toujours same-origin
+      const parts = path.split('/').filter(Boolean); // [download|index, source, token]
+      const source = parts[1] || '';
+      const ref = b64urlDecode(parts[2] || '');
+      // ref peut être un chemin relatif ou une URL absolue ; on prend le
+      // dernier segment non vide, sans query string.
+      let name = ref.split('?')[0].replace(/\/+$/, '');
+      name = name.split('/').filter(Boolean).pop() || ref || '(sans nom)';
+      try { name = decodeURIComponent(name); } catch { /* garde tel quel */ }
+      return { name, source, path };
+    }
+
+    const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    // --- Chargement & rendu ------------------------------------------------
+
+    async function load(url) {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="state">Chargement…</div>';
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        currentItems = {
+          files: Array.isArray(data.files) ? data.files : [],
+          directories: Array.isArray(data.directories) ? data.directories : [],
+        };
+        render();
+      } catch (err) {
+        content.innerHTML = `<div class="state error">Échec du chargement : ${escapeHtml(err.message)}</div>`;
+        document.getElementById('count').textContent = '';
+      }
+    }
+
+    function render() {
+      const filter = document.getElementById('filter').value.trim().toLowerCase();
+      const content = document.getElementById('content');
+
+      // Dossiers puis fichiers, chacun décrits et filtrés.
+      const dirs = currentItems.directories
+        .map((d) => ({ raw: typeof d === 'string' ? d : d.url, size: null, isDir: true }))
+        .filter((d) => d.raw);
+      const files = currentItems.files
+        .map((f) => ({ raw: f.url, size: f.size, isDir: false }))
+        .filter((f) => f.raw);
+
+      const rows = [...dirs, ...files]
+        .map((it) => ({ ...it, ...describe(it.raw) }))
+        .filter((it) => !filter || it.name.toLowerCase().includes(filter));
+
+      renderCrumbs();
+      document.getElementById('count').textContent =
+        `${rows.length} élément${rows.length > 1 ? 's' : ''}`;
+
+      if (rows.length === 0) {
+        content.innerHTML = '<div class="state">Aucun élément à afficher.</div>';
+        return;
+      }
+
+      const body = rows.map((it) => {
+        const badge = it.isDir
+          ? '<span class="badge dossier">Dossier</span>'
+          : `<span class="badge ${it.source}">${escapeHtml(it.source)}</span>`;
+        const name = it.isDir
+          ? `<a class="folder" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">📁 ${escapeHtml(it.name)}</a>`
+          : escapeHtml(it.name);
+        const action = it.isDir
+          ? `<button class="btn ghost open" data-url="${escapeHtml(it.path)}" data-title="${escapeHtml(it.name)}">Ouvrir</button>`
+          : `<a class="btn" href="${escapeHtml(it.path)}">Télécharger</a>`;
+        return `<tr>
+          <td class="name">${name}</td>
+          <td>${badge}</td>
+          <td class="size">${it.isDir ? '' : formatSize(it.size)}</td>
+          <td class="actions">${action}</td>
+        </tr>`;
+      }).join('');
+
+      content.innerHTML = `<table>
+        <thead><tr><th>Nom</th><th>Source</th><th>Taille</th><th></th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+
+      // Branche la navigation dans les dossiers.
+      content.querySelectorAll('[data-url]').forEach((el) => {
+        if (el.tagName === 'A' && el.classList.contains('btn')) return; // liens de download
+        el.addEventListener('click', () => enterDir(el.dataset.url, el.dataset.title));
+      });
+    }
+
+    function renderCrumbs() {
+      const el = document.getElementById('crumbs');
+      const parts = history.map((h, i) => {
+        const label = i === history.length - 1 ? `<b>${escapeHtml(h.title)}</b>` : escapeHtml(h.title);
+        return `<a class="plain" data-idx="${i}">${label}</a>`;
+      });
+      el.innerHTML = parts.join(' <span style="opacity:.5">/</span> ');
+      el.querySelectorAll('[data-idx]').forEach((a) => {
+        a.addEventListener('click', () => goTo(Number(a.dataset.idx)));
+      });
+    }
+
+    function enterDir(url, title) {
+      history.push({ url, title });
+      load(url);
+    }
+
+    function goTo(idx) {
+      history.splice(idx + 1); // tronque après le niveau cliqué
+      load(history[idx].url);
+    }
+
+    // --- Événements globaux ------------------------------------------------
+    document.getElementById('filter').addEventListener('input', render);
+    document.getElementById('reload').addEventListener('click', () => load(history[history.length - 1].url));
+
+    // Démarrage.
+    load('/');
+  </script>
+</body>
+</html>
