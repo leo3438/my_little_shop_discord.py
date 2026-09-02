@@ -39,7 +39,7 @@ downloadRouter.get('/:source/:token', async (req, res) => {
     source: source.name,
     id: req.params.token.slice(0, 12) + '…',
     url,
-    headers: source.authHeaders(),
+    headers: source.upstreamHeaders(),
     req,
     res,
   });

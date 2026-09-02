@@ -16,7 +16,7 @@ import { SOURCES, toRef, encodeRef } from './sources.js';
 export async function fetchSourceIndex(source, indexUrl = source.indexUrl()) {
   logger.info(`⬇️  Récupération de l'index [${source.name}] → ${indexUrl}`);
   const res = await fetch(indexUrl, {
-    headers: { 'User-Agent': config.userAgent, Accept: 'application/json', ...source.authHeaders() },
+    headers: { Accept: 'application/json', ...source.upstreamHeaders() },
   });
   if (!res.ok) {
     throw Object.assign(new Error(`Index ${source.name} : HTTP ${res.status}`), {

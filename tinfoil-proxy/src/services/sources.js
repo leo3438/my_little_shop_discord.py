@@ -7,8 +7,10 @@ import { config } from '../config.js';
  *   - key        : identifiant utilisé dans les routes locales (/download/<key>/...).
  *   - name       : nom lisible (logs).
  *   - indexUrl() : URL amont de l'index à récupérer.
- *   - authHeaders() : en-têtes HTTP à injecter (Basic pour Magic Monkei, aucun
- *                     pour UltraNX dont l'auth est dans le chemin).
+ *   - upstreamHeaders() : TOUS les en-têtes à envoyer en amont (User-Agent +
+ *                     authentification + identification appareil). Chaque source
+ *                     se présente différemment : UltraNX simule l'app DBI,
+ *                     Magic Monkei se présente comme Tinfoil (UA) + Basic.
  *   - secretPrefix() : préfixe d'URL contenant des identifiants à masquer dans
  *                      les liens réécrits (UltraNX uniquement).
  *   - allowedHosts() : hôtes autorisés (dérivés de l'index amont). Empêche
@@ -31,6 +33,27 @@ const encodePathSegment = (str) =>
 const ULTRANX_INDEX_URL = () =>
   `${config.ultranx.baseUrl}/${encodePathSegment(config.ultranx.login)}/` +
   `${encodePathSegment(config.ultranx.password)}/`;
+
+/**
+ * En-têtes simulant l'application DBI pour UltraNX. Le serveur refuse les
+ * requêtes sans « device info » (erreur "Failed to get device info!"). On envoie
+ * donc un User-Agent DBI et des en-têtes d'identification d'appareil Switch.
+ *
+ * NB : les noms/valeurs exacts attendus par UltraNX ne sont pas publics ; ces
+ * valeurs par défaut sont plausibles et peuvent être ajustées/complétées sans
+ * toucher au code via la variable ULTRANX_HEADERS (JSON ou lignes « Clé: Val »).
+ */
+function ultranxHeaders() {
+  return {
+    'User-Agent': config.ultranx.userAgent, // ex. DBI/755
+    // En-têtes d'appareil « façon Switch/DBI » (valeurs par défaut génériques).
+    'DBI-Version': '755',
+    'Device-Model': 'Nintendo Switch',
+    'Device-Firmware': '18.1.0',
+    // Surcharges/ajouts fournis par l'utilisateur (ont priorité).
+    ...config.ultranx.extraHeaders,
+  };
+}
 
 /**
  * Dérive la liste d'hôtes autorisés à partir de l'hôte de l'index amont :
@@ -59,8 +82,8 @@ export const SOURCES = {
     key: 'ultranx',
     name: 'UltraNX',
     indexUrl: ULTRANX_INDEX_URL,
-    // Auth portée par le chemin de l'URL : aucun en-tête supplémentaire.
-    authHeaders: () => ({}),
+    // Auth portée par le chemin de l'URL ; on ajoute les en-têtes DBI exigés.
+    upstreamHeaders: ultranxHeaders,
     // Préfixe (login/password inclus) retiré des liens réécrits pour ne pas
     // exposer les identifiants au client. Reconstruit côté serveur au download.
     secretPrefix: ULTRANX_INDEX_URL,
@@ -73,8 +96,11 @@ export const SOURCES = {
     key: 'magicmonkei',
     name: 'MagicMonkei',
     indexUrl: () => config.magicMonkei.indexUrl,
-    // Auth par en-tête HTTP Basic.
-    authHeaders: () => ({ Authorization: basicAuth(config.magicMonkei.user, config.magicMonkei.pass) }),
+    // Se présente comme Tinfoil (User-Agent) + authentification HTTP Basic.
+    upstreamHeaders: () => ({
+      'User-Agent': config.userAgent,
+      Authorization: basicAuth(config.magicMonkei.user, config.magicMonkei.pass),
+    }),
     // Rien à masquer : les identifiants ne sont pas dans l'URL.
     secretPrefix: () => null,
     allowedHosts: () =>

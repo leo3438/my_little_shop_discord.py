@@ -12,15 +12,34 @@ import 'dotenv/config';
 
 const stripTrailingSlash = (value = '') => value.replace(/\/+$/, '');
 
+/**
+ * Parse un jeu d'en-têtes HTTP fourni via une variable d'environnement.
+ * Accepte du JSON ({"Device-Id":"..."}) ou des lignes « Clé: Valeur »
+ * séparées par des retours à la ligne ou des points-virgules.
+ */
+function parseHeadersEnv(raw) {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+  } catch { /* pas du JSON : on tente le format ligne */ }
+  const out = {};
+  for (const line of raw.split(/[\n;]+/)) {
+    const i = line.indexOf(':');
+    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+  return out;
+}
+
 export const config = {
   port: Number(process.env.PORT) || 3000,
   publicBaseUrl: stripTrailingSlash(
     process.env.PUBLIC_BASE_URL || `http://localhost:${Number(process.env.PORT) || 3000}`,
   ),
 
-  // User-Agent injecté sur TOUS les appels amont. Le User-Agent Node par défaut
-  // est souvent rejeté (Cloudflare, filtrage). On se fait passer pour Tinfoil ;
-  // surchargeable par un UA de navigateur si une source l'exige.
+  // User-Agent Tinfoil, utilisé pour Magic Monkei (et par défaut). Le UA Node
+  // par défaut est souvent rejeté (Cloudflare, filtrage) ; surchargeable par un
+  // UA de navigateur si une source l'exige.
   userAgent: process.env.PROXY_USER_AGENT || 'Tinfoil/17.0',
 
   ultranx: {
@@ -29,11 +48,17 @@ export const config = {
     baseUrl: stripTrailingSlash(process.env.ULTRANX_BASE_URL || 'https://dbi.ultranx.ru/link'),
     login: process.env.ULTRANX_LOGIN || '',
     password: process.env.ULTRANX_PASSWORD || '',
+    // UltraNX vérifie que la requête provient de l'app DBI (« Failed to get
+    // device info! » sinon). On simule DBI : User-Agent dédié + en-têtes
+    // d'identification. Valeurs surchargeables/complétables via ULTRANX_HEADERS.
+    userAgent: process.env.ULTRANX_USER_AGENT || 'DBI/755',
+    extraHeaders: parseHeadersEnv(process.env.ULTRANX_HEADERS),
   },
 
   magicMonkei: {
-    // Index Tinfoil protégé par authentification HTTP Basic.
-    indexUrl: process.env.MAGIC_MONKEI_INDEX_URL || 'https://shop.magicmonkei.com/tinfoil',
+    // Index Tinfoil protégé par authentification HTTP Basic. Le fichier JSON
+    // s'appelle « shop.tfl » (le dossier /tinfoil/ renvoie un listing HTML).
+    indexUrl: process.env.MAGIC_MONKEI_INDEX_URL || 'https://shop.magicmonkei.com/tinfoil/shop.tfl',
     user: process.env.MAGIC_MONKEI_USER || '',
     pass: process.env.MAGIC_MONKEI_PASS || '',
   },
