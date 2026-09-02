@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { config } from '../config.js';
 import { logger } from '../logger.js';
 
 /**
@@ -41,8 +42,10 @@ export async function streamRemote({ source, id, url, headers, req, res }) {
     upstream = await fetch(url, {
       method: 'GET',
       headers: {
-        // Certaines sources filtrent selon le User-Agent : on imite Tinfoil.
-        'User-Agent': req.get('user-agent') || 'Tinfoil',
+        // User-Agent fixe (et non celui du client) : les sources filtrent selon
+        // le User-Agent, et un téléchargement lancé depuis /web enverrait sinon
+        // un UA de navigateur potentiellement rejeté en amont.
+        'User-Agent': config.userAgent,
         // On propage l'en-tête Range pour permettre la reprise de téléchargement.
         ...(req.get('range') ? { Range: req.get('range') } : {}),
         ...headers,

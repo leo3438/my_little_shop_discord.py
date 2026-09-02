@@ -19,9 +19,18 @@ import { config } from '../config.js';
 
 const basicAuth = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
 
+/**
+ * Encode un segment de chemin d'URL de façon stricte (RFC 3986).
+ * `encodeURIComponent` laisse passer `! ' ( ) *` ; or un `*` (ou un autre de ces
+ * caractères) dans le login/password UltraNX casse le chemin et provoque un 401.
+ * On les encode donc explicitement (ex. `*` → `%2A`).
+ */
+const encodePathSegment = (str) =>
+  encodeURIComponent(str).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+
 const ULTRANX_INDEX_URL = () =>
-  `${config.ultranx.baseUrl}/${encodeURIComponent(config.ultranx.login)}/` +
-  `${encodeURIComponent(config.ultranx.password)}/`;
+  `${config.ultranx.baseUrl}/${encodePathSegment(config.ultranx.login)}/` +
+  `${encodePathSegment(config.ultranx.password)}/`;
 
 /**
  * Dérive la liste d'hôtes autorisés à partir de l'hôte de l'index amont :
