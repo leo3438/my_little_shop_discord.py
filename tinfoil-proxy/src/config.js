@@ -68,6 +68,9 @@ export const config = {
   igdb: {
     clientId: process.env.IGDB_CLIENT_ID || '',
     clientSecret: process.env.IGDB_CLIENT_SECRET || '',
+    // Endpoints surchargeables (réseaux restreints / tests).
+    tokenUrl: process.env.IGDB_TOKEN_URL || 'https://id.twitch.tv/oauth2/token',
+    apiUrl: process.env.IGDB_API_URL || 'https://api.igdb.com/v4/games',
   },
 };
 

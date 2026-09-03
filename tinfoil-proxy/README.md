@@ -121,6 +121,10 @@ un bouton **Télécharger** (routes de proxy relatives). Fonctionnalités :
   seules les lignes visibles interrogent `/api/cover`, pour éviter le
   rate-limiting sur des dizaines de milliers de jeux. Un **placeholder** sobre
   s'affiche pendant le chargement ou si IGDB ne trouve rien.
+- **Fiche détaillée** : un clic sur une jaquette ou un titre ouvre une **modale**
+  IGDB (synopsis, date de sortie, note, genres) via `/api/game`.
+- **Tri par colonne** : clic sur les en-têtes **Nom** (A→Z / Z→A) et **Taille**
+  (lourd→léger / léger→lourd) ; un 3ᵉ clic revient à l'ordre naturel.
 - Au-delà de ~1 500 lignes, l'affichage est tronqué (le navigateur ne tient pas
   72 000 lignes DOM) : affinez via le filtre ou la console.
 
@@ -182,6 +186,7 @@ docker compose up -d --build   # rebuild + relancer après modification
 | `GET`   | `/`                            | Index Tinfoil unifié (fusion des 2 sources).       |
 | `GET`   | `/web`                         | Médiathèque (jaquettes, consoles, téléchargement). |
 | `GET`   | `/api/cover?name=<jeu>`        | Jaquette IGDB : `{ cover: "https://…"|null }`.      |
+| `GET`   | `/api/game?name=<jeu>`         | Détails IGDB (synopsis, date, note, genres).        |
 | `GET`   | `/index/:source/:token`        | Sous-index re-proxifié (navigation dans les dossiers). |
 | `GET`   | `/download/:source/:token`     | Streaming du fichier (auth injectée côté serveur). |
 | `GET`   | `/health`                      | Sonde de santé (`{ "status": "ok" }`).             |

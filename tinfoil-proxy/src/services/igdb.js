@@ -31,7 +31,7 @@ async function throttle() {
 async function getToken() {
   if (tokenCache.token && Date.now() < tokenCache.expiresAt) return tokenCache.token;
   const url =
-    'https://id.twitch.tv/oauth2/token' +
+    config.igdb.tokenUrl +
     `?client_id=${encodeURIComponent(config.igdb.clientId)}` +
     `&client_secret=${encodeURIComponent(config.igdb.clientSecret)}` +
     '&grant_type=client_credentials';
@@ -60,8 +60,26 @@ export function cleanGameName(raw) {
 }
 
 // IGDB renvoie une URL en //images.igdb.com/.../t_thumb/xxx.jpg ; on passe en
-// https + taille « cover_big ».
-const toCoverUrl = (u) => (u ? 'https:' + u.replace('/t_thumb/', '/t_cover_big/') : null);
+// https + une taille donnée (cover_big par défaut).
+const toCoverUrl = (u, size = 't_cover_big') => (u ? 'https:' + u.replace('/t_thumb/', `/${size}/`) : null);
+
+/** Exécute une recherche IGDB et renvoie le premier jeu (ou null). */
+async function queryFirstGame(name, fields) {
+  const token = await getToken();
+  await throttle();
+  const res = await fetch(config.igdb.apiUrl, {
+    method: 'POST',
+    headers: {
+      'Client-ID': config.igdb.clientId,
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+    body: `search "${name.replace(/"/g, '')}"; fields ${fields}; limit 1;`,
+  });
+  if (!res.ok) throw new Error(`IGDB games HTTP ${res.status}`);
+  const arr = await res.json();
+  return Array.isArray(arr) && arr[0] ? arr[0] : null;
+}
 
 /**
  * Renvoie l'URL de la jaquette d'un jeu (ou null si introuvable / non configuré).
@@ -75,20 +93,8 @@ export async function getCover(rawName) {
 
   const promise = (async () => {
     try {
-      const token = await getToken();
-      await throttle();
-      const res = await fetch('https://api.igdb.com/v4/games', {
-        method: 'POST',
-        headers: {
-          'Client-ID': config.igdb.clientId,
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: `search "${name.replace(/"/g, '')}"; fields name,cover.url; limit 1;`,
-      });
-      if (!res.ok) throw new Error(`IGDB games HTTP ${res.status}`);
-      const arr = await res.json();
-      const url = toCoverUrl(arr?.[0]?.cover?.url) || null;
+      const game = await queryFirstGame(name, 'name,cover.url');
+      const url = toCoverUrl(game?.cover?.url) || null;
       coverCache.set(name, url);
       return url;
     } catch (err) {
@@ -101,5 +107,52 @@ export async function getCover(rawName) {
   })();
 
   inflight.set(name, promise);
+  return promise;
+}
+
+const detailCache = new Map();
+const detailInflight = new Map();
+
+/**
+ * Renvoie les détails d'un jeu (synopsis, date de sortie, note, genres, jaquette)
+ * pour la modale, ou null. Résultat mis en cache par nom nettoyé.
+ */
+export async function getGameDetails(rawName) {
+  if (!igdbConfigured()) return null;
+  const name = cleanGameName(rawName);
+  if (!name) return null;
+  if (detailCache.has(name)) return detailCache.get(name);
+  if (detailInflight.has(name)) return detailInflight.get(name);
+
+  const promise = (async () => {
+    try {
+      const g = await queryFirstGame(
+        name,
+        'name,summary,storyline,first_release_date,total_rating,rating,genres.name,cover.url',
+      );
+      const details = g && {
+        name: g.name || name,
+        cover: toCoverUrl(g.cover?.url),
+        summary: g.summary || g.storyline || '',
+        // first_release_date : timestamp Unix en secondes -> ISO (YYYY-MM-DD).
+        released: g.first_release_date
+          ? new Date(g.first_release_date * 1000).toISOString().slice(0, 10)
+          : null,
+        rating: Number.isFinite(g.total_rating) ? Math.round(g.total_rating)
+          : Number.isFinite(g.rating) ? Math.round(g.rating) : null,
+        genres: Array.isArray(g.genres) ? g.genres.map((x) => x.name).filter(Boolean) : [],
+      };
+      detailCache.set(name, details || null);
+      return details || null;
+    } catch (err) {
+      logger.warn(`IGDB : détails introuvables pour « ${name} » (${err.message})`);
+      detailCache.set(name, null);
+      return null;
+    } finally {
+      detailInflight.delete(name);
+    }
+  })();
+
+  detailInflight.set(name, promise);
   return promise;
 }

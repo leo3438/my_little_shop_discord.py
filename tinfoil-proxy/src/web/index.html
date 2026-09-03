@@ -116,6 +116,43 @@
     .tag.update { background: #1e3a8a; color: #bfdbfe; }
     .tag.dlc { background: #7c2d12; color: #fed7aa; }
 
+    /* En-têtes triables */
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { color: var(--text); }
+    th.sortable .arrow { font-size: 10px; opacity: .5; margin-left: 3px; }
+    th.sortable.active { color: var(--text); }
+    th.sortable.active .arrow { opacity: 1; color: var(--accent); }
+    .clickable-title { cursor: pointer; }
+    .clickable-title:hover { color: var(--accent); }
+    .cover-img.linkable { cursor: pointer; }
+
+    /* Modale IGDB */
+    .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+      justify-content: center; padding: 20px; background: rgba(5,7,10,.72); }
+    .modal[hidden] { display: none; } /* prime sur [hidden] du navigateur */
+    .modal-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      width: min(720px, 100%); max-height: 88vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-head { display: flex; gap: 18px; padding: 20px; border-bottom: 1px solid var(--border); }
+    .modal-cover {
+      width: 132px; height: 176px; flex: 0 0 auto; object-fit: cover; border-radius: 10px;
+      background: var(--panel-2); box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    }
+    .modal-info { flex: 1; min-width: 0; }
+    .modal-info h2 { margin: 0 0 8px; font-size: 19px; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+    .meta-row .rating { color: #fbbf24; font-weight: 700; }
+    .genres { display: flex; flex-wrap: wrap; gap: 6px; }
+    .genre { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+    .modal-body { padding: 18px 20px; }
+    .modal-body p { margin: 0; color: #c7cdd6; font-size: 14px; line-height: 1.6; }
+    .modal-body .empty { color: var(--muted); font-style: italic; }
+    .modal-close { position: sticky; top: 8px; float: right; margin: 8px 8px 0 0;
+      background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1; }
+    .modal-close:hover { background: var(--border); }
+
     .state { text-align: center; color: var(--muted); padding: 40px 10px; }
     .state.error { color: #f87171; }
     .count { color: var(--muted); font-size: 13px; margin-left: auto; }
@@ -142,6 +179,13 @@
     <div id="crumbs" class="crumbs"></div>
     <div id="content"><div class="state">Chargement du catalogue…</div></div>
   </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" id="modalClose" aria-label="Fermer">✕</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
 
   <script>
     'use strict';
@@ -170,6 +214,8 @@
     const coverCache = new Map(); // nom -> url|null (mémoïsation client)
     const expandedGroups = new Set(); // clés de groupes (Title ID base) dépliés
     let allEntries = []; // entrées regroupées (calculées une fois par chargement)
+    let sort = { field: null, dir: 'asc' }; // tri courant (null = ordre de l'index)
+    const detailCache = new Map(); // nom -> détails IGDB|null (modale)
 
     // --- Utilitaires -------------------------------------------------------
 
@@ -409,6 +455,15 @@
         return e.variants.some((v) => v.name.toLowerCase().includes(filter));
       });
 
+      // Tri optionnel (nom ou taille) ; sinon ordre de l'index.
+      if (sort.field) {
+        const mul = sort.dir === 'asc' ? 1 : -1;
+        games.sort((a, b) => {
+          if (sort.field === 'size') return ((a.main.size || 0) - (b.main.size || 0)) * mul;
+          return a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }) * mul;
+        });
+      }
+
       const list = [...dirs, ...games];
       const total = list.length;
       const shown = list.slice(0, MAX_RENDER);
@@ -448,8 +503,8 @@
           (e.dlcs.length ? `<span class="vbadge dlc">${e.dlcs.length} DLC</span>` : '') +
           (e.updates.length ? `<span class="vbadge">${e.updates.length} version${e.updates.length > 1 ? 's' : ''}</span>` : '');
         const main = `<tr>
-          <td class="cover-cell"><img class="cover-img" data-name="${escapeHtml(e.title)}" src="${PLACEHOLDER}" alt="" loading="lazy" /></td>
-          <td class="name">${caret}${escapeHtml(e.title)}${badges}</td>
+          <td class="cover-cell"><img class="cover-img linkable" data-name="${escapeHtml(e.title)}" data-game="${escapeHtml(e.title)}" src="${PLACEHOLDER}" alt="" loading="lazy" /></td>
+          <td class="name">${caret}<span class="clickable-title" data-game="${escapeHtml(e.title)}">${escapeHtml(e.title)}</span>${badges}</td>
           <td class="console-cell">${escapeHtml(e.console || '')}</td>
           <td><span class="badge ${e.source}">${escapeHtml(e.source)}</span></td>
           <td class="size">${formatSize(e.main.size)}</td>
@@ -463,8 +518,11 @@
         return main + drawer;
       }).join('');
 
+      const arrow = (f) => (sort.field === f ? (sort.dir === 'asc' ? '▲' : '▼') : '↕');
+      const th = (f, label) =>
+        `<th class="sortable ${sort.field === f ? 'active' : ''}" data-sort="${f}">${label}<span class="arrow">${arrow(f)}</span></th>`;
       content.innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>Jaquette</th><th>Nom</th><th>Console</th><th>Source</th><th>Taille</th><th></th></tr></thead>
+        <thead><tr><th>Jaquette</th>${th('name', 'Nom')}<th>Console</th><th>Source</th>${th('size', 'Taille')}<th></th></tr></thead>
         <tbody>${body}</tbody>
       </table></div>`;
 
@@ -478,6 +536,16 @@
         btn.addEventListener('click', () => toggleGroup(btn.dataset.caret, btn));
       });
 
+      // Tri au clic sur les en-têtes.
+      content.querySelectorAll('th.sortable').forEach((h) => {
+        h.addEventListener('click', () => toggleSort(h.dataset.sort));
+      });
+
+      // Ouverture de la modale IGDB (clic sur jaquette ou titre).
+      content.querySelectorAll('[data-game]').forEach((el) => {
+        el.addEventListener('click', () => openGame(el.dataset.game));
+      });
+
       // Lazy-loading des jaquettes : on observe les <img> rendues.
       setupCoverObserver();
       content.querySelectorAll('img.cover-img').forEach((img) => coverObserver.observe(img));
@@ -489,6 +557,71 @@
       if (open) expandedGroups.add(key); else expandedGroups.delete(key);
       btn.classList.toggle('open', open);
       if (drawer) drawer.hidden = !open;
+    }
+
+    // Tri : 1er clic = sens par défaut (nom A→Z, taille lourd→léger), 2e clic
+    // inverse, 3e clic revient à l'ordre de l'index.
+    function toggleSort(field) {
+      if (sort.field !== field) {
+        sort = { field, dir: field === 'size' ? 'desc' : 'asc' };
+      } else if ((field === 'size' && sort.dir === 'desc') || (field === 'name' && sort.dir === 'asc')) {
+        sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sort = { field: null, dir: 'asc' }; // retour à l'ordre naturel
+      }
+      render();
+    }
+
+    // --- Modale de détails IGDB --------------------------------------------
+
+    async function openGame(title) {
+      const modal = document.getElementById('modal');
+      const box = document.getElementById('modalContent');
+      box.innerHTML = `<div class="state">Chargement des détails…</div>`;
+      modal.hidden = false;
+
+      let data = detailCache.get(title);
+      if (data === undefined) {
+        try {
+          const res = await fetch('/api/game?name=' + encodeURIComponent(title));
+          data = await res.json();
+        } catch { data = { found: false }; }
+        detailCache.set(title, data);
+      }
+      // La modale a pu être fermée entre-temps.
+      if (modal.hidden) return;
+
+      if (!data || !data.found) {
+        box.innerHTML = `<div class="modal-head">
+          <img class="modal-cover" src="${PLACEHOLDER}" alt="" />
+          <div class="modal-info"><h2>${escapeHtml(title)}</h2>
+          <div class="meta-row">Aucune information IGDB${data && data.reason === 'igdb-not-configured' ? ' (IGDB non configuré)' : ''}.</div></div>
+        </div>`;
+        return;
+      }
+
+      const meta = [];
+      if (data.released) meta.push(`📅 ${escapeHtml(data.released)}`);
+      if (data.rating != null) meta.push(`<span class="rating">★ ${data.rating}/100</span>`);
+      const genres = (data.genres || []).map((g) => `<span class="genre">${escapeHtml(g)}</span>`).join('');
+      const summary = data.summary
+        ? `<p>${escapeHtml(data.summary)}</p>`
+        : `<p class="empty">Pas de synopsis disponible.</p>`;
+      box.innerHTML = `<div class="modal-head">
+          <img class="modal-cover" src="${data.cover || PLACEHOLDER}" alt="" onerror="this.src='${PLACEHOLDER}'" />
+          <div class="modal-info">
+            <h2>${escapeHtml(data.name || title)}</h2>
+            <div class="meta-row">${meta.join('') || '—'}</div>
+            <div class="genres">${genres}</div>
+          </div>
+        </div>
+        <div class="modal-body">${summary}</div>`;
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('modal');
+      modal.hidden = true;
+      document.getElementById('modalContent').innerHTML = '';
     }
 
     function renderCrumbs() {
@@ -514,6 +647,15 @@
     });
     document.getElementById('console').addEventListener('change', render);
     document.getElementById('reload').addEventListener('click', () => load(history[history.length - 1].url));
+
+    // Modale : fermeture (bouton, clic sur le fond, touche Échap).
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('modal').addEventListener('click', (ev) => {
+      if (ev.target.id === 'modal') closeModal();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !document.getElementById('modal').hidden) closeModal();
+    });
 
     load('/');
   </script>

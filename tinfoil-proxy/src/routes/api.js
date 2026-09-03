@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCover, igdbConfigured } from '../services/igdb.js';
+import { getCover, getGameDetails, igdbConfigured } from '../services/igdb.js';
 
 export const apiRouter = Router();
 
@@ -21,5 +21,24 @@ apiRouter.get('/cover', async (req, res) => {
     res.json({ cover });
   } catch {
     res.json({ cover: null });
+  }
+});
+
+/**
+ * GET /api/game?name=<nom du jeu>
+ * Détails IGDB pour la modale : { name, cover, summary, released, rating, genres }.
+ * Renvoie { found: false } si non trouvé ou IGDB non configuré.
+ */
+apiRouter.get('/game', async (req, res) => {
+  const name = (req.query.name || '').toString();
+  if (!name) return res.status(400).json({ error: 'paramètre name requis' });
+  if (!igdbConfigured()) return res.json({ found: false, reason: 'igdb-not-configured' });
+
+  try {
+    const details = await getGameDetails(name);
+    res.set('Cache-Control', 'public, max-age=604800');
+    res.json(details ? { found: true, ...details } : { found: false });
+  } catch {
+    res.json({ found: false });
   }
 });
