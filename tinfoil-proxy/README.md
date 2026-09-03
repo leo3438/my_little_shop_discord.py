@@ -111,6 +111,12 @@ un bouton **Télécharger** (routes de proxy relatives). Fonctionnalités :
 
 - **Filtre par nom** (debounced) et **menu déroulant de consoles** alimenté
   dynamiquement (nom de la console = dossier parent côté Magic Monkei).
+- **Regroupement par Title ID** (jeux Switch) : les variantes d'un même jeu
+  (base, mises à jour v65536/v131072…, DLC) sont empilées sous **une seule
+  ligne** avec des badges (dernière MàJ, nb de DLC/versions) ; un **tiroir
+  cliquable** déplie chaque variante (Base / MàJ / DLC) avec son propre bouton
+  de téléchargement. L'index Tinfoil (`GET /`) reste **plat** : la Switch voit
+  toujours tous les fichiers.
 - **Jaquettes IGDB** chargées en **lazy-loading** (`IntersectionObserver`) :
   seules les lignes visibles interrogent `/api/cover`, pour éviter le
   rate-limiting sur des dizaines de milliers de jeux. Un **placeholder** sobre
