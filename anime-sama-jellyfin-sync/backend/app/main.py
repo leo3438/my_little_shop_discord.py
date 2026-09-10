@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 from .config import get_settings
 from .database import get_session, init_db
 from .downloader import process_episode
-from .models import Episode, EpisodeStatus
+from .models import Episode, EpisodeStatus, MediaType
 from .schemas import EpisodeAccepted, EpisodeIn, EpisodeOut
 
 logging.basicConfig(
@@ -52,33 +52,48 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _find_existing(session: Session, payload: EpisodeIn) -> Episode | None:
+    """Recherche un contenu déjà connu, selon le type de média."""
+    stmt = select(Episode).where(
+        Episode.media_type == payload.media_type,
+        Episode.language == payload.language,
+    )
+    if payload.media_type == MediaType.LIVE_TV:
+        stmt = stmt.where(Episode.channel_name == payload.channel_name)
+    elif payload.media_type == MediaType.MOVIE:
+        stmt = stmt.where(
+            Episode.anime_title == payload.anime_title,
+            Episode.year == payload.year,
+        )
+    else:  # series / manga
+        stmt = stmt.where(
+            Episode.anime_title == payload.anime_title,
+            Episode.season == payload.season,
+            Episode.episode_number == payload.episode_number,
+        )
+    return session.exec(stmt).first()
+
+
 @app.post("/api/episode", response_model=EpisodeAccepted, status_code=202)
 def receive_episode(
     payload: EpisodeIn,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> EpisodeAccepted:
-    """Reçoit un épisode capturé par l'extension.
+    """Reçoit un contenu capturé par l'extension.
 
-    - Vérifie les doublons (anime + saison + épisode + langue).
-    - Sauvegarde l'entrée.
-    - Lance le téléchargement en tâche de fond.
+    - Déduplique selon le type de média.
+    - Sauvegarde l'entrée puis lance le traitement en tâche de fond.
+    - Live TV : l'entrée est toujours (ré)inscrite dans la playlist (upsert).
     """
-    existing = session.exec(
-        select(Episode).where(
-            Episode.anime_title == payload.anime_title,
-            Episode.season == payload.season,
-            Episode.episode_number == payload.episode_number,
-            Episode.language == payload.language,
-        )
-    ).first()
+    existing = _find_existing(session, payload)
 
     if existing is not None:
-        # Si un précédent essai a échoué, on autorise une relance.
-        if existing.status == EpisodeStatus.FAILED:
-            existing.status = EpisodeStatus.PENDING
+        # Live TV : on met toujours à jour l'URL du flux et on réinscrit.
+        if payload.media_type == MediaType.LIVE_TV:
             existing.video_url = payload.video_url
             existing.request_headers = json.dumps(payload.headers)
+            existing.status = EpisodeStatus.PENDING
             existing.error = None
             session.add(existing)
             session.commit()
@@ -88,21 +103,41 @@ def receive_episode(
                 id=existing.id,
                 status=existing.status,
                 duplicate=True,
-                detail="Épisode déjà connu (échec précédent) : téléchargement relancé.",
+                detail="Chaîne Live TV connue : playlist mise à jour.",
+            )
+
+        # Movie / Series : on relance uniquement si l'essai précédent a échoué.
+        if existing.status == EpisodeStatus.FAILED:
+            existing.video_url = payload.video_url
+            existing.request_headers = json.dumps(payload.headers)
+            existing.status = EpisodeStatus.PENDING
+            existing.error = None
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+            background_tasks.add_task(process_episode, existing.id)
+            return EpisodeAccepted(
+                id=existing.id,
+                status=existing.status,
+                duplicate=True,
+                detail="Contenu déjà connu (échec précédent) : traitement relancé.",
             )
 
         return EpisodeAccepted(
             id=existing.id,
             status=existing.status,
             duplicate=True,
-            detail="Épisode déjà enregistré : aucune action.",
+            detail="Contenu déjà enregistré : aucune action.",
         )
 
     episode = Episode(
+        media_type=payload.media_type,
         anime_title=payload.anime_title,
         season=payload.season,
         episode_number=payload.episode_number,
         language=payload.language,
+        year=payload.year,
+        channel_name=payload.channel_name,
         video_url=payload.video_url,
         request_headers=json.dumps(payload.headers),
         status=EpisodeStatus.PENDING,
@@ -113,18 +148,25 @@ def receive_episode(
 
     background_tasks.add_task(process_episode, episode.id)
     logger.info(
-        "Épisode reçu : %s S%02dE%02d [%s]",
+        "Contenu reçu [%s] : %s (S%02dE%02d / %s / %s)",
+        episode.media_type.value,
         episode.anime_title,
         episode.season,
         episode.episode_number,
+        episode.year,
         episode.language,
     )
 
+    detail = (
+        "Chaîne Live TV acceptée : inscription en cours."
+        if payload.media_type == MediaType.LIVE_TV
+        else "Contenu accepté : téléchargement lancé."
+    )
     return EpisodeAccepted(
         id=episode.id,
         status=episode.status,
         duplicate=False,
-        detail="Épisode accepté : téléchargement lancé.",
+        detail=detail,
     )
 
 

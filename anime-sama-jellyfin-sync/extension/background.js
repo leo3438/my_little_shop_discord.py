@@ -15,7 +15,8 @@ const api = globalThis.browser || globalThis.chrome;
 
 const DEFAULT_BACKEND = "http://localhost:8000/api/episode";
 
-// Hébergeurs vidéo connus utilisés par anime-sama.
+// Hébergeurs vidéo connus (anime-sama + afterdark). Sert d'indice
+// supplémentaire ; la détection repose surtout sur l'extension (.mp4/.m3u8).
 const VIDEO_HOSTS = [
   "sibnet.ru",
   "sendvid.com",
@@ -23,6 +24,7 @@ const VIDEO_HOSTS = [
   "myvi.top",
   "smoothpre.com",
   "anime-sama.fr",
+  ".mom",
 ];
 
 // En-têtes que l'on transmet au backend pour rejouer le téléchargement.
@@ -42,9 +44,21 @@ function isVideoRequest(url) {
   return VIDEO_HOSTS.some((h) => u.includes(h)) && u.includes("video");
 }
 
-/** Clé d'unicité d'un épisode. */
+/** Clé d'unicité d'un contenu (dépend du type de média). */
 function episodeKey(meta) {
-  return [meta.anime_title, meta.season, meta.episode_number, meta.language].join("|");
+  if (meta.media_type === "live_tv") {
+    return ["live_tv", meta.channel_name, meta.language].join("|");
+  }
+  if (meta.media_type === "movie") {
+    return ["movie", meta.anime_title, meta.year, meta.language].join("|");
+  }
+  return [
+    meta.media_type || "series",
+    meta.anime_title,
+    meta.season,
+    meta.episode_number,
+    meta.language,
+  ].join("|");
 }
 
 /** Récupère l'URL du backend configurée (ou la valeur par défaut). */
@@ -61,10 +75,13 @@ async function getBackendUrl() {
 async function sendToBackend(meta, videoUrl, headers) {
   const backendUrl = await getBackendUrl();
   const payload = {
+    media_type: meta.media_type || "series",
     anime_title: meta.anime_title,
     season: meta.season,
     episode_number: meta.episode_number,
     language: meta.language,
+    year: meta.year ?? null,
+    channel_name: meta.channel_name ?? null,
     video_url: videoUrl,
     headers,
   };

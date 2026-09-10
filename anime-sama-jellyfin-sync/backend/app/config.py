@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     # Stockage
     media_root: Path = Path("./media")
+    # Playlist M3U pour la section Live TV de Jellyfin. Vide => {media_root}/iptv.m3u
+    iptv_playlist_path: str = ""
 
     # Téléchargement
     downloader: str = "yt-dlp"  # "yt-dlp" | "aria2c"
@@ -42,6 +44,13 @@ class Settings(BaseSettings):
     jellyfin_url: str = "http://localhost:8096"
     jellyfin_api_key: str = ""
     jellyfin_refresh_enabled: bool = True
+
+    @property
+    def iptv_playlist(self) -> Path:
+        """Chemin résolu de la playlist IPTV (défaut : {media_root}/iptv.m3u)."""
+        if self.iptv_playlist_path.strip():
+            return Path(self.iptv_playlist_path).expanduser().resolve()
+        return Path(self.media_root).expanduser().resolve() / "iptv.m3u"
 
     @property
     def cors_origin_list(self) -> list[str]:

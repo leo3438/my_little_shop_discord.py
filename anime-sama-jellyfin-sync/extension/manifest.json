@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Anime-Sama -> Jellyfin Sync",
-  "version": "1.0.0",
-  "description": "Capture les métadonnées et le flux vidéo des épisodes regardés sur Anime-Sama et les envoie au backend local pour intégration dans Jellyfin.",
+  "name": "Anime-Sama / Afterdark -> Jellyfin Sync",
+  "version": "1.1.0",
+  "description": "Capture les métadonnées et le flux vidéo des contenus regardés sur Anime-Sama et Afterdark, puis les envoie au backend local pour intégration dans Jellyfin.",
 
   "permissions": [
     "webRequest",
@@ -13,14 +13,12 @@
   "host_permissions": [
     "*://anime-sama.fr/*",
     "*://*.anime-sama.fr/*",
-    "*://video.sibnet.ru/*",
-    "*://*.sendvid.com/*",
-    "*://*.vidmoly.to/*",
-    "*://*.vidmoly.net/*",
-    "*://*.myvi.top/*",
-    "*://*.smoothpre.com/*",
+    "*://afd926.mom/*",
+    "*://*.afd926.mom/*",
+    "*://*.mom/*",
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "*://*/*"
   ],
 
   "background": {
@@ -31,7 +29,10 @@
     {
       "matches": [
         "*://anime-sama.fr/*",
-        "*://*.anime-sama.fr/*"
+        "*://*.anime-sama.fr/*",
+        "*://afd926.mom/*",
+        "*://*.afd926.mom/*",
+        "*://*.mom/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -39,7 +40,7 @@
   ],
 
   "action": {
-    "default_title": "Anime-Sama -> Jellyfin",
+    "default_title": "Anime-Sama / Afterdark -> Jellyfin",
     "default_popup": "popup.html"
   }
 }
