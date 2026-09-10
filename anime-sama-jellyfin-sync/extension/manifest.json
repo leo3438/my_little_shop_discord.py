@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Anime-Sama -> Jellyfin Sync",
+  "version": "1.0.0",
+  "description": "Capture les métadonnées et le flux vidéo des épisodes regardés sur Anime-Sama et les envoie au backend local pour intégration dans Jellyfin.",
+
+  "permissions": [
+    "webRequest",
+    "storage",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "*://anime-sama.fr/*",
+    "*://*.anime-sama.fr/*",
+    "*://video.sibnet.ru/*",
+    "*://*.sendvid.com/*",
+    "*://*.vidmoly.to/*",
+    "*://*.vidmoly.net/*",
+    "*://*.myvi.top/*",
+    "*://*.smoothpre.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://anime-sama.fr/*",
+        "*://*.anime-sama.fr/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_title": "Anime-Sama -> Jellyfin",
+    "default_popup": "popup.html"
+  }
+}
