@@ -1,0 +1,10 @@
+build/
+*.nro
+*.nacp
+*.elf
+*.map
+*.lst
+compile_commands.json
+tests/fixtures/*.pk8
+tests/fixtures/*.pk9
+tests/fixtures/main*
