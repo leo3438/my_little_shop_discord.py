@@ -19,6 +19,10 @@ enum class ErrorCode {
     PermissionDenied,
     IoError,
     Unsupported,
+    InvalidArgument,
+    ParseError,            // malformed document (JSON, cfg...)
+    NetworkError,          // unreachable host, timeout, protocol failure
+    AuthenticationFailed,  // server rejected the credentials
 };
 
 const char* toString(ErrorCode code);

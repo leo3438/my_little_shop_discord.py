@@ -10,6 +10,18 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 1 skeleton"
+        "version": "v{} - Phase 2 - shop"
+    },
+    "shop": {
+        "title": "Shop",
+        "open": "Browse the shop",
+        "loading": "Loading {}...",
+        "empty": "This shop has no games.",
+        "selected": "Game selected: {}",
+        "error_network": "Cannot reach the shop. Check the network and the NAS.",
+        "error_auth": "The server rejected the user name or password.",
+        "error_not_found": "The shop index was not found on the server.",
+        "error_format": "The shop index is invalid or uses an unsupported format.",
+        "error_generic": "Cannot load the shop: {}"
     }
 }

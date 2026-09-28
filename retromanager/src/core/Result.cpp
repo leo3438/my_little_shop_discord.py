@@ -13,6 +13,10 @@ const char* toString(ErrorCode code) {
         case ErrorCode::PermissionDenied: return "PermissionDenied";
         case ErrorCode::IoError: return "IoError";
         case ErrorCode::Unsupported: return "Unsupported";
+        case ErrorCode::InvalidArgument: return "InvalidArgument";
+        case ErrorCode::ParseError: return "ParseError";
+        case ErrorCode::NetworkError: return "NetworkError";
+        case ErrorCode::AuthenticationFailed: return "AuthenticationFailed";
     }
     return "Unknown";
 }

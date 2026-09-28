@@ -1,0 +1,26 @@
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    focusable="true"
+    paddingTop="12"
+    paddingBottom="12"
+    paddingLeft="@style/brls/sidebar/item_accent_margin_sides"
+    paddingRight="@style/brls/sidebar/item_accent_margin_sides">
+
+    <brls:Label
+        id="game/title"
+        width="auto"
+        height="auto"
+        singleLine="true"
+        fontSize="@style/brls/sidebar/item_font_size" />
+
+    <brls:Label
+        id="game/detail"
+        width="auto"
+        height="auto"
+        singleLine="true"
+        fontSize="16"
+        textColor="@theme/brls/text_disabled"
+        marginTop="4" />
+</brls:Box>

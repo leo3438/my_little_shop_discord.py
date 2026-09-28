@@ -7,6 +7,7 @@ cmake_minimum_required(VERSION 3.22)
 # ---------------------------------------------------------------------------
 option(RM_BUILD_APP "Build the Borealis application" ON)
 option(RM_BUILD_TESTS "Build the unit tests (desktop only)" OFF)
+option(RM_WITH_CURL "Build the libcurl-based network clients (FtpClient)" ON)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -37,15 +38,32 @@ set(RM_WARNINGS -Wall -Wextra -Wpedantic)
 # ---------------------------------------------------------------------------
 add_library(retromanager_core STATIC
     src/core/AppContext.cpp
+    src/core/Format.cpp
     src/core/Result.cpp
+    src/core/Url.cpp
+    src/models/Systems.cpp
+    src/network/MockRemoteSource.cpp
+    src/parsers/RepoIndexParser.cpp
     src/platform/common/IFileSystem.cpp
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
+    src/services/ShopService.cpp
 )
 target_include_directories(retromanager_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(retromanager_core PUBLIC nlohmann_json::nlohmann_json)
 target_compile_definitions(retromanager_core PUBLIC RM_VERSION="${PROJECT_VERSION}")
 target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
+
+# ---------------------------------------------------------------------------
+# retromanager_curl: network clients backed by libcurl. Kept out of the core
+# so the core stays dependency-free.
+# ---------------------------------------------------------------------------
+if (RM_WITH_CURL)
+    include(Curl)
+    add_library(retromanager_curl STATIC src/network/FtpClient.cpp)
+    target_link_libraries(retromanager_curl PUBLIC retromanager_core PRIVATE CURL::libcurl)
+    target_compile_options(retromanager_curl PRIVATE ${RM_WARNINGS})
+endif ()
 
 # ---------------------------------------------------------------------------
 # Application
@@ -68,6 +86,7 @@ if (RM_BUILD_APP)
 
     set(RM_APP_SRC
         src/main.cpp
+        src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp
         ${RM_PLATFORM_SRC}
     )
@@ -78,6 +97,10 @@ if (RM_BUILD_APP)
     program_target(${PROJECT_NAME} "${RM_APP_SRC}")
     target_compile_options(${PROJECT_NAME} PRIVATE -ffunction-sections -fdata-sections ${APP_PLATFORM_OPTION})
     target_link_libraries(${PROJECT_NAME} PRIVATE retromanager_core borealis ${APP_PLATFORM_LIB})
+    if (RM_WITH_CURL)
+        target_link_libraries(${PROJECT_NAME} PRIVATE retromanager_curl)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE RM_WITH_CURL)
+    endif ()
     if (PLATFORM_DESKTOP)
         target_compile_definitions(${PROJECT_NAME} PRIVATE
             RM_DESKTOP_DEFAULT_SD_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/sdmc")

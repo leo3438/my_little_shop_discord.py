@@ -18,7 +18,14 @@
         <brls:Label
             text="@i18n/retromanager/home/subtitle"
             horizontalAlign="center"
-            marginBottom="60" />
+            marginBottom="40" />
+
+        <brls:Button
+            id="home/open_shop"
+            style="primary"
+            width="400"
+            text="@i18n/retromanager/shop/open"
+            marginBottom="40" />
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />
@@ -28,6 +35,6 @@
             id="home/version"
             fontSize="16"
             horizontalAlign="center"
-            marginTop="60" />
+            marginTop="40" />
     </brls:Box>
 </brls:AppletFrame>

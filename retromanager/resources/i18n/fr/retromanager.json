@@ -10,6 +10,18 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Squelette Phase 1"
+        "version": "v{} - Phase 2 - boutique"
+    },
+    "shop": {
+        "title": "Boutique",
+        "open": "Parcourir la boutique",
+        "loading": "Chargement de {}...",
+        "empty": "Cette boutique ne contient aucun jeu.",
+        "selected": "Jeu sélectionné : {}",
+        "error_network": "Impossible de joindre la boutique. Vérifiez le réseau et le NAS.",
+        "error_auth": "Le serveur a refusé l'identifiant ou le mot de passe.",
+        "error_not_found": "L'index de la boutique est introuvable sur le serveur.",
+        "error_format": "L'index de la boutique est invalide ou dans un format non pris en charge.",
+        "error_generic": "Impossible de charger la boutique : {}"
     }
 }

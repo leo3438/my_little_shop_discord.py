@@ -16,10 +16,32 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-openssl-dev
+          pip install pyftpdlib
+      - name: Configure
+        run: cmake --preset tests -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+      - name: Build
+        run: cmake --build --preset tests -j
+      - name: Start the test FTP server
+        run: |
+          python3 tools/test_ftp_server.py --port-file "$RUNNER_TEMP/ftp.port" > "$RUNNER_TEMP/ftp.log" 2>&1 &
+          for i in $(seq 1 40); do [ -s "$RUNNER_TEMP/ftp.port" ] && break; sleep 0.25; done
+          test -s "$RUNNER_TEMP/ftp.port" || { cat "$RUNNER_TEMP/ftp.log"; exit 1; }
+          echo "RM_TEST_FTP_PORT=$(cat "$RUNNER_TEMP/ftp.port")" >> "$GITHUB_ENV"
+      - name: Test (FTP integration included)
+        run: ctest --preset tests
+
+  tests-bundled-curl:
+    name: Unit tests (libcurl built from source)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
       - name: Install Ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Configure
-        run: cmake --preset tests -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+        run: cmake --preset tests -DRM_FETCH_CURL=ON
       - name: Build
         run: cmake --build --preset tests -j
       - name: Test
@@ -34,7 +56,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libgl-dev libxrandr-dev libxinerama-dev libxcursor-dev \
-            libxi-dev libxkbcommon-dev libwayland-dev libdbus-1-dev pkg-config
+            libxi-dev libxkbcommon-dev libwayland-dev libdbus-1-dev pkg-config libcurl4-openssl-dev
       - name: Configure
         run: cmake --preset desktop
       - name: Build

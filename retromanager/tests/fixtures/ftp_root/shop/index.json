@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "name": "Test FTP shop",
+  "games": [
+    {"title": "Super Mario World", "region": "USA", "size": 14,
+     "url": "roms/snes/Super%20Mario%20World%20(USA).sfc"},
+    {"title": "Pokémon Émeraude", "region": "EUR", "size": 13,
+     "url": "roms/gba/Pok%C3%A9mon%20%C3%89meraude%20(France).gba"}
+  ]
+}

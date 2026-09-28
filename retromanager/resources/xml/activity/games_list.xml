@@ -1,0 +1,43 @@
+<brls:AppletFrame>
+    <brls:Box
+        title="@i18n/retromanager/shop/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        grow="1.0">
+
+        <brls:Label
+            id="games/motd"
+            visibility="gone"
+            fontSize="18"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginTop="16"
+            marginBottom="4" />
+
+        <!-- Focusable (highlight hidden) so the activity owns the focus while
+             loading or on error: otherwise the previous screen's highlight
+             stays drawn on top. -->
+        <brls:Label
+            id="games/status"
+            focusable="true"
+            hideHighlight="true"
+            hideClickAnimation="true"
+            width="auto"
+            grow="1.0"
+            horizontalAlign="center"
+            verticalAlign="center" />
+
+        <brls:RecyclerFrame
+            id="games/recycler"
+            visibility="gone"
+            width="auto"
+            height="auto"
+            grow="1.0"
+            paddingTop="@style/brls/sidebar/padding_top"
+            paddingRight="@style/brls/sidebar/padding_right"
+            paddingBottom="@style/brls/sidebar/padding_bottom"
+            paddingLeft="@style/brls/sidebar/padding_left" />
+    </brls:Box>
+</brls:AppletFrame>

@@ -1,12 +1,38 @@
 #include <borealis.hpp>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
+#include <string>
 
 #include "retromanager/core/AppContext.hpp"
+#include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/platform/Platform.hpp"
+#include "retromanager/services/ShopService.hpp"
+#include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
 
 using namespace brls::literals;  // _i18n
+
+namespace {
+
+// Debug knobs to exercise the shop's loading and error screens:
+//   RETROMANAGER_MOCK_LATENCY_MS=3000
+//   RETROMANAGER_MOCK_ERROR=network|auth|notfound|format
+void configureMockFromEnvironment(rm::MockRemoteSource& source) {
+    if (const char* latency = std::getenv("RETROMANAGER_MOCK_LATENCY_MS")) {
+        source.setLatency(std::chrono::milliseconds(std::atol(latency)));
+    }
+    if (const char* error = std::getenv("RETROMANAGER_MOCK_ERROR")) {
+        std::string kind(error);
+        rm::ErrorCode code = kind == "auth"       ? rm::ErrorCode::AuthenticationFailed
+                             : kind == "notfound" ? rm::ErrorCode::NotFound
+                             : kind == "format"   ? rm::ErrorCode::ParseError
+                                                  : rm::ErrorCode::NetworkError;
+        source.setFailure(rm::makeError(code, "simulated by RETROMANAGER_MOCK_ERROR"));
+    }
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
@@ -30,7 +56,14 @@ int main(int argc, char* argv[]) {
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
     brls::Application::setGlobalQuit(true);  // + quits from any screen
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus));
+    // Phase 2: the shop is served by the in-memory mock. The FtpClient will
+    // be selected here once sources are configurable (config.json).
+    rm::ui::BorealisTaskRunner tasks;
+    rm::MockRemoteSource shopSource;
+    configureMockFromEnvironment(shopSource);
+    rm::ShopService shop(shopSource, tasks);
+
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop));
 
     while (brls::Application::mainLoop()) {
     }
