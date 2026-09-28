@@ -1,0 +1,59 @@
+name: RetroManager
+
+on:
+  push:
+    paths: ["retromanager/**", ".github/workflows/retromanager.yml"]
+  pull_request:
+    paths: ["retromanager/**", ".github/workflows/retromanager.yml"]
+
+defaults:
+  run:
+    working-directory: retromanager
+
+jobs:
+  tests:
+    name: Unit tests (ASan + UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: cmake --preset tests -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+      - name: Build
+        run: cmake --build --preset tests -j
+      - name: Test
+        run: ctest --preset tests
+
+  desktop:
+    name: Desktop app (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgl-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libxi-dev libxkbcommon-dev libwayland-dev libdbus-1-dev pkg-config
+      - name: Configure
+        run: cmake --preset desktop
+      - name: Build
+        run: cmake --build --preset desktop -j
+      - name: Test
+        run: ctest --preset desktop
+
+  switch:
+    name: Nintendo Switch (.nro)
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset switch
+      - name: Build
+        run: cmake --build --preset switch -j"$(nproc)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RetroManager-nro
+          path: retromanager/build/switch/RetroManager.nro
