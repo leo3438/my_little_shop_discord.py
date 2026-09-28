@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "tests",
+      "inherits": "base",
+      "displayName": "Unit tests only (no Borealis, no GPU dependencies)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "RM_BUILD_APP": "OFF",
+        "RM_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "desktop",
+      "inherits": "base",
+      "displayName": "Desktop app (Linux/macOS/Windows) + unit tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PLATFORM_DESKTOP": "ON",
+        "RM_BUILD_APP": "ON",
+        "RM_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "switch",
+      "inherits": "base",
+      "displayName": "Nintendo Switch .nro (requires DEVKITPRO)",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PLATFORM_SWITCH": "ON",
+        "RM_BUILD_APP": "ON",
+        "RM_BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "tests", "configurePreset": "tests" },
+    { "name": "desktop", "configurePreset": "desktop" },
+    { "name": "switch", "configurePreset": "switch" }
+  ],
+  "testPresets": [
+    { "name": "tests", "configurePreset": "tests", "output": { "outputOnFailure": true } },
+    { "name": "desktop", "configurePreset": "desktop", "output": { "outputOnFailure": true } }
+  ]
+}

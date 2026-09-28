@@ -1,0 +1,9 @@
+build/
+out/
+sdmc/
+.cache/
+compile_commands.json
+*.nro
+*.nacp
+*.elf
+!tests/fixtures/**/*.nro
