@@ -31,13 +31,13 @@ contredit, on modifie d'abord ce document.
 ```mermaid
 graph TD
     UI["ui/ : Activities & vues Borealis"]
-    SVC["services/ : ShopService ✅, RomManager, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
-    PARSE["parsers/ : RepoIndexParser ✅, CfgParser, IniParser, ChtParser"]
-    FS["fs/ : RomStore, SaveStore, BiosStore"]
-    NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SmbClient, HttpClient"]
+    SVC["services/ : ShopService ✅, DownloadService ✅, ConfigManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
+    PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgParser, IniParser, ChtParser"]
+    FS["fs/ : RomStore ✅, SaveStore, BiosStore"]
+    NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SourceFactory ✅, SmbClient, HttpClient"]
     PLAT["platform/ : IFileSystem, VirtualPath, SdLayout, Platform"]
-    CORE["core/ : Result, AppContext, ITaskRunner, Url, Format"]
-    MODELS["models/ : GameEntry, RepoIndex, Systems"]
+    CORE["core/ : Result, AppContext, ITaskRunner, WorkerThread, EventBus, Cancellation, Crc32, Url, Format"]
+    MODELS["models/ : GameEntry, RepoIndex, Systems, AppConfig"]
 
     UI --> SVC
     UI --> MODELS
@@ -47,6 +47,7 @@ graph TD
     SVC --> FS
     SVC --> NET
     FS --> PLAT
+    FS --> MODELS
     NET --> CORE
     PARSE --> CORE
     MODELS --> CORE
@@ -55,12 +56,12 @@ graph TD
 
 | Couche | Rôle | Peut dépendre de | Ne doit **jamais** |
 |---|---|---|---|
-| `core/` | Types de base (`Result`, `Status`), composition (`AppContext`), `ITaskRunner`, utilitaires purs (`Url`, `Format`) | STL | inclure Borealis ou libnx |
-| `models/` | Données pures partagées par toutes les couches (`GameEntry`, `RepoIndex`, `SystemSection`) et catalogue des systèmes | `core` | contenir du comportement autre que des accesseurs |
+| `core/` | Types de base (`Result`, `Status`), composition (`AppContext`), exécution (`ITaskRunner`, `WorkerThread`, `CancellationToken`), `EventBus`, utilitaires purs (`Url`, `Format`, `Crc32`) | STL | inclure Borealis ou libnx |
+| `models/` | Données pures partagées par toutes les couches (`GameEntry`, `RepoIndex`, `SystemSection`, `AppConfig`) et catalogue des systèmes | `core` | contenir du comportement autre que des accesseurs |
 | `platform/` | Abstractions système + implémentations par plateforme | `core` | contenir de la logique métier |
 | `parsers/` | Fonctions **pures** texte ⇄ structures (`.cfg`, `.ini`, JSON, `.cht`) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
-| `fs/` | Opérations SD typées (ranger une ROM, retrouver une save…) | `platform`, `core` | parler au réseau |
-| `network/` | Déplace des octets derrière `IRemoteSource` | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD (il fournira des flux) |
+| `fs/` | Opérations SD typées : `RomStore` (destination, espace libre, installation atomique vérifiée par CRC) | `platform`, `models`, `core` | parler au réseau |
+| `network/` | Déplace des octets derrière `IRemoteSource` (index en mémoire, ROMs en flux vers un `ChunkSink`) | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD |
 | `services/` | Cas d'usage : orchestrent parsers, fs et network | tout ce qui précède | inclure Borealis |
 | `ui/` | Affichage et navigation Borealis | `services`, `models`, `core` | appeler un parser, un `IRemoteSource` ou `IFileSystem` directement |
 
@@ -72,8 +73,8 @@ graph TD
 
 | Cible | Contenu | Plateformes |
 |---|---|---|
-| `retromanager_core` | `src/core`, `src/models`, `src/parsers`, `src/services`, `src/platform/common`, `MockRemoteSource` | toutes : c'est ce qu'on teste |
-| `retromanager_curl` | `FtpClient` (libcurl). Option `RM_WITH_CURL`, activée par défaut | toutes |
+| `retromanager_core` | `src/core`, `src/models`, `src/parsers`, `src/fs`, `src/services`, `src/platform/common`, `MockRemoteSource` | toutes : c'est ce qu'on teste |
+| `retromanager_curl` | `FtpClient`, `SourceFactory` (libcurl). Option `RM_WITH_CURL`, activée par défaut | toutes |
 | `RetroManager` | `src/main.cpp`, `src/ui`, **une seule** implémentation de `src/platform/{switch,desktop}` + Borealis | desktop, Switch (`.nro`) |
 | `retromanager_mocks` | `tests/mocks` : `MemoryFileSystem`, chargeur de fausse SD | desktop (tests) |
 | `retromanager_tests` | `tests/unit`, `tests/integration` (GoogleTest) | desktop |
@@ -103,10 +104,14 @@ liront les vrais chemins dans `retroarch.cfg`.
   `openRead` / `openWrite` (par flux, pour les gros fichiers), `remove`,
   `removeAll`, `rename`, et des utilitaires communs (`readFile`, `writeFile`,
   `exists`…).
-- **Écritures atomiques** : `openWrite` écrit dans un fichier de transit
-  (`*.rm-partial`, masqué dans les listings), qui ne remplace la cible qu'au
-  `close()`. Un crash ou une coupure réseau pendant un téléchargement ou une
-  synchronisation ne laisse jamais de ROM tronquée ni de save corrompue.
+- **Écritures atomiques** : `openWrite("/roms/nds/Jeu.nds")` écrit dans un
+  fichier de transit caché, `/roms/nds/.Jeu.nds.tmp` (masqué dans les
+  listings), renommé sur la cible seulement au `close()`. Détruire le flux
+  sans `close()` supprime le `.tmp`. Un crash, une annulation ou une coupure
+  réseau ne laisse jamais de ROM tronquée ni de save corrompue ; un `.tmp`
+  resté après une coupure de courant est écrasé à la tentative suivante.
+- `availableSpace(path)` : espace libre du volume (`Unsupported` si la
+  plateforme ne sait pas le dire ; l'appelant continue alors sans contrôle).
 - Codes d'erreur normalisés (`NotFound`, `NotADirectory`, `IsADirectory`,
   `NotEmpty`, `InvalidPath`, `PermissionDenied`…), identiques sur toutes les
   implémentations.
@@ -117,7 +122,7 @@ liront les vrais chemins dans `retroarch.cfg`.
 |---|---|---|
 | `LocalFileSystem("sdmc:/")` | carte SD montée par libnx | console |
 | `LocalFileSystem(<dossier>)` | `retromanager/sdmc/` ou `$RETROMANAGER_SD_ROOT` | app desktop sur une fausse SD |
-| `test::MemoryFileSystem` | RAM | tests unitaires rapides et hermétiques, mode lecture seule simulé |
+| `test::MemoryFileSystem` | RAM | tests unitaires rapides et hermétiques ; lecture seule et capacité de carte simulables |
 
 **Test de contrat** (`tests/unit/FileSystemContractTest.cpp`) : la même suite
 s'exécute contre chaque implémentation. C'est la garantie qu'un service validé
@@ -169,37 +174,54 @@ sequenceDiagram
 ```
 
 L'UI ne connaît que `ShopService` et les modèles. `main.cpp` choisit la
-source (aujourd'hui `MockRemoteSource`, demain `FtpClient` selon
-`config.json`) : changer de source ne touche ni l'UI ni le service.
+source d'après `config.json` (`ConfigManager` → `createRemoteSource` :
+`FtpClient`, `MockRemoteSource`, ou `UnavailableRemoteSource` qui porte
+l'erreur de configuration jusqu'à l'écran) : changer de source ne touche ni
+l'UI ni les services. Configuration : [docs/CONFIG.md](docs/CONFIG.md).
 
 Format de l'index : [docs/INDEX_FORMAT.md](docs/INDEX_FORMAT.md).
 
-### 4.3 Exemple de flux (Phase 3) : télécharger une ROM
+### 4.3 Flux implémenté (Phase 3) : télécharger une ROM
 
 ```mermaid
 sequenceDiagram
-    participant UI as RomBrowserActivity (ui)
-    participant S as RomManager (services)
-    participant R as IRemoteSource (network)
+    participant UI as DownloadActivity (ui)
+    participant B as EventBus (core)
+    participant D as DownloadService (services, WorkerThread)
     participant F as RomStore → IFileSystem (fs/platform)
-    UI->>S: download(entry)          [thread UI]
-    S->>R: openRead(remotePath)      [tâche de fond]
-    S->>F: openWrite(/roms/snes/x.sfc)
-    loop chunks
-        R-->>S: read(chunk)
-        S->>F: write(chunk)
-        S-->>UI: progression (repostée sur le thread UI)
+    participant R as IRemoteSource (network)
+    UI->>B: subscribe(Started / Progressed / Finished)
+    UI->>D: start(game) → id                       [thread UI, rend la main]
+    D->>F: beginInstall(game) : espace libre, .Jeu.nds.tmp
+    alt espace insuffisant
+        D-->>B: Finished{InsufficientSpace, chiffres}  (le NAS n'est jamais contacté)
     end
-    S->>F: close()  (commit atomique)
-    S-->>UI: Result (succès / erreur typée)
+    D->>R: downloadFile(url, sink, progress, token)
+    loop blocs de ~16-256 Kio
+        R->>F: sink → RomInstall::write (tampon 1 Mio, CRC32 au fil de l'eau)
+        D-->>B: Progressed (≤ 10 par seconde)
+    end
+    UI->>D: cancel(id) sur B → token → curl abandonne, .tmp supprimé
+    D->>F: commit() : CRC vérifié puis renommage atomique
+    D-->>B: Finished{ok | Cancelled | NetworkError | IntegrityError…}
+    B-->>UI: handlers exécutés sur le thread principal
 ```
+
+La mémoire consommée ne dépend pas de la taille de la ROM : tampon
+d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
+d'intégration mesure la mémoire résidente pendant un téléchargement de
+64 Mio : environ +1,2 Mio (échec au-delà de 16 Mio).
 
 ### 4.4 Asynchronisme
 
-- Les opérations longues (réseau, copie, scraping) passent par `ITaskRunner`
-  (`core/ITaskRunner.hpp`) : `ui::BorealisTaskRunner` (`brls::async` /
-  `brls::sync`) dans l'app, `ImmediateTaskRunner` ou une file manuelle dans
-  les tests, qui restent donc synchrones et déterministes.
+- Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
+  - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
+    courtes (chargement de l'index) ;
+  - `WorkerThread`, un thread dédié possédé par `DownloadService`, pour les
+    téléchargements : ils durent des minutes et ne doivent pas bloquer la
+    boucle de tâches unique de Borealis ;
+  - `ImmediateTaskRunner` ou une file manuelle dans les tests, qui restent
+    donc synchrones et déterministes.
 - Les services livrent leurs résultats par callback **sur le thread
   principal**. Ils ignorent tout de Borealis : c'est l'implémentation
   d'`ITaskRunner` fournie par l'UI qui fait le saut de thread.
@@ -208,14 +230,21 @@ sequenceDiagram
   (`shared_ptr<bool>`), vérifié sur le thread principal.
 - `Application::exit()` de Borealis attend la fin du thread de tâches : les
   services créés dans `main()` survivent donc à toute tâche en cours.
-- Pas de bus d'événements global tant qu'un besoin réel n'apparaît pas
-  (synchronisation cloud en arrière-plan, par exemple).
+- **EventBus** (`core/EventBus.hpp`) : canal typé services → UI pour les
+  événements qui durent (progression des téléchargements, demain la synchro
+  cloud). `publish()` depuis n'importe quel thread ; les handlers tournent
+  toujours sur le thread principal ; une `Subscription` détruite n'est plus
+  jamais appelée, même pour un événement déjà en file.
+- `DownloadService` possède son `WorkerThread` : son destructeur annule tout
+  et attend la fin du transfert en cours. Dans `main()`, il est déclaré en
+  dernier pour être détruit en premier.
 
 ### 4.5 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
-authentification, index introuvable, format invalide). Aucune exception ne
+authentification, index introuvable, format invalide, espace insuffisant,
+CRC incorrect, configuration absente). Aucune exception ne
 traverse une frontière de couche (le parser attrape celles de nlohmann/json).
 
 ---
@@ -226,12 +255,17 @@ traverse une frontière de couche (le parser attrape celles de nlohmann/json).
    `.cfg`, synchronisation, parsing des listings FTP).
 2. **Unitaires** (`tests/unit`) : `MemoryFileSystem` et fakes, rapides.
 3. **Contrat** : une suite par interface, exécutée sur chaque implémentation.
-4. **Intégration** (`tests/integration`) : `FtpClient` contre un vrai serveur
-   FTP local (`tools/test_ftp_server.py`, pyftpdlib) servant
-   `tests/fixtures/ftp_root`. Ces tests sont ignorés (`SKIPPED`) si
-   `RM_TEST_FTP_PORT` n'est pas défini.
-5. **CI** (`.github/workflows/retromanager.yml`) : tests sous ASan et UBSan,
-   build desktop, build Switch `.nro` dans le conteneur `devkitpro/devkita64`.
+4. **Intégration** (`tests/integration`) : `FtpClient` → `DownloadService` →
+   `RomStore` → disque, contre un vrai serveur local
+   (`tools/test_ftp_server.py`, pyftpdlib) servant `tests/fixtures/ftp_root`
+   plus une ROM générée de 64 Mio avec son CRC, et un second serveur **FTPS**
+   au certificat auto-signé. Couvert : flux, mémoire bornée, annulation,
+   nettoyage du `.tmp`, fichier absent, identifiants jamais envoyés à un autre
+   hôte, `verifyTls` on/off. Ignorés (`SKIPPED`) sans `RM_TEST_FTP_PORT` /
+   `RM_TEST_FTPS_PORT`.
+5. **CI** (`.github/workflows/retromanager.yml`) : tests sous ASan et UBSan
+   avec les deux serveurs, build desktop, libcurl compilée depuis les
+   sources, build Switch `.nro` dans le conteneur `devkitpro/devkita64`.
 
 ---
 
@@ -241,7 +275,7 @@ traverse une frontière de couche (le parser attrape celles de nlohmann/json).
 retromanager/
 ├── CMakeLists.txt, CMakePresets.json   # presets tests / desktop / switch
 ├── cmake/                              # FetchBorealis (avant project()), Dependencies, Curl
-├── docs/                               # INDEX_FORMAT.md, captures
+├── docs/                               # INDEX_FORMAT.md, CONFIG.md, captures
 ├── include/retromanager/<couche>/      # en-têtes publics, un dossier par couche
 ├── src/<couche>/                       # implémentations (même découpage)
 │   └── platform/{common,switch,desktop}
@@ -261,5 +295,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 |---|---|---|
 | 0–1 | Squelette, `IFileSystem` avec mocks, fausse SD, écran d'accueil, CI | ✅ |
 | 2 | Boutique : `GameEntry`, `RepoIndexParser`, `IRemoteSource` (mock + FTP), `ShopService`, liste Borealis | ✅ |
-| 3 | Téléchargement : `IRemoteSource::openRead` en flux, `RomStore`, écriture atomique sur la SD, progression | — |
-| 4+ | Configuration des sources (`config.json`), SMB/HTTP, scraping, configurateur RetroArch, cheats, cloud saves, forwarders | — |
+| 3 | `config.json` + vrai `FtpClient`, téléchargement en flux, `RomStore` (espace, CRC, atomique), `EventBus`, écran de progression annulable, FTPS sans vérification | ✅ |
+| 4+ | Marqueur « installé » et file de téléchargements, SMB/HTTP, scraping, configurateur RetroArch, cheats, cloud saves, forwarders | — |

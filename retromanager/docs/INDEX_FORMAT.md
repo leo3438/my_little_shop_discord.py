@@ -52,9 +52,9 @@ Tout autre champ est ignoré (compatibilité ascendante).
 | `title` | chaîne non vide | nom du fichier sans extension |
 | `system` | chaîne (id, voir plus bas) | déduit de l'extension, sinon `unknown` |
 | `region` | chaîne libre (`EUR`, `USA`, `JPN`…) | vide |
-| `size` | entier ≥ 0, en octets | 0 (inconnue) |
+| `size` | entier ≥ 0, en octets ; sert au contrôle d'espace libre avant téléchargement | 0 (inconnue : pas de contrôle) |
 | `boxart` | chaîne (URL) | vide |
-| `crc32` | 8 chiffres hexadécimaux | vide |
+| `crc32` | 8 chiffres hexadécimaux, **vérifié après téléchargement** (fichier rejeté si différent) | vide |
 | `year` | entier entre 1950 et 2100 | absent |
 | `description` | chaîne | vide |
 | `id` | chaîne unique dans l'index | `<system>/<nom de fichier>` |
@@ -69,6 +69,13 @@ Tout autre champ est ignoré (compatibilité ascendante).
 - Convention Tinfoil : un fragment `#Nom%20du%20fichier.gba` fixe le nom du
   fichier sur la SD, utile quand l'URL n'en contient pas (`dl?id=42`). Le
   fragment est retiré de l'URL de téléchargement.
+
+### Hébergement des ROMs
+
+Les identifiants du NAS ne sont envoyés qu'au serveur de l'index (même hôte,
+même port) : une entrée pointant vers un autre serveur est refusée au
+téléchargement. Les ROMs sont installées dans `/roms/<system>/<nom>` ; les
+caractères interdits sur FAT/exFAT (`<>:"|?*`) deviennent `_`.
 
 ### Identifiants de système
 
