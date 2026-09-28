@@ -223,19 +223,80 @@ défait jamais l'installation : son erreur est rapportée à côté.
 |---|---|
 | `EmulatorConfigurator` | `rgui_browser_directory` de `retroarch.cfg` pointe sur le dossier de la ROM (`/roms/nds/`). Édition via `CfgDocument` : seule la valeur change, tout le reste du fichier est conservé octet pour octet. Copie `retroarch.cfg.rmbak` avant la première modification ; fichier créé s'il n'existe pas ; rien si RetroArch n'est pas installé. |
 | `CheatManager` | Si l'entrée a un `cheat_url` : télécharge le `.cht` (1 Mio max, validé comme fichier de triche RetroArch) dans `<cheat_database_path>/<système libretro>/<nom de la ROM>.cht`. |
+| `SysClkConfigurator` | Pour un jeu N64, PlayStation ou 3DS : section `[<title id>]` de `/config/sys-clk/config.ini` avec `handheld_cpu=1785` et `docked_cpu=1785`. Édition via `IniDocument` (sections, commentaires `;`/`#`, sans perte), copie `config.ini.rmbak`, idempotent ; `NotFound` si sys-clk n'est pas installé (`/config/sys-clk` absent). Title id configurable (`sysclk.title_id`, défaut `05B9D58000000000`), étape désactivable (`sysclk.enabled`). |
 
 La mémoire consommée ne dépend pas de la taille de la ROM : tampon
 d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
 d'intégration mesure la mémoire résidente pendant un téléchargement de
 64 Mio : environ +1,2 Mio (échec au-delà de 16 Mio).
 
-### 4.4 Asynchronisme
+### 4.4 Flux implémenté (Phase 5) : synchroniser les sauvegardes
+
+`CloudSyncService` (services, son propre `WorkerThread`) synchronise dans
+les deux sens les sauvegardes RetroArch (`.srm`, `.sav`, `.dsv`, sous-dossiers
+jusqu'à 3 niveaux) entre `savefile_directory` (lu dans `retroarch.cfg`,
+`/retroarch/saves` par défaut) et le dossier `saves_url` du NAS.
+
+```mermaid
+sequenceDiagram
+    participant UI as SyncActivity (ui)
+    participant S as CloudSyncService (WorkerThread)
+    participant P as planSync (pur)
+    participant F as IFileSystem
+    participant R as IRemoteSource
+    UI->>S: start()
+    S->>F: scan local (taille, mtime)
+    S->>R: listDirectory récursif (MLSD, repli NLST + MDTM)
+    S->>F: sync-state.json (état des deux côtés après la synchro précédente)
+    S->>P: local, distant, état précédent
+    P-->>S: une action par fichier
+    loop chaque fichier
+        S->>R: uploadFile → .Jeu.srm.tmp puis RNFR/RNTO (atomique côté NAS)
+        S->>F: ou downloadFile → .Jeu.srm.tmp puis renommage
+        S-->>UI: SyncProgressed{done, total, fichier, action}
+    end
+    S->>R: nouveau listing (horodatages posés par le NAS)
+    S->>F: sync-state.json réécrit atomiquement
+    S-->>UI: SyncFinished{X envoyées, Y reçues, conflits, échecs}
+```
+
+**Décision** (`services/SyncPlanner.cpp`, fonction pure, 11 tests) : la règle
+« le plus récent gagne » seule provoque un ping-pong (après un envoi, la
+copie du NAS porte l'heure de l'envoi, plus récente que le fichier local) et
+dépend de l'horloge des deux machines. RetroManager compare donc chaque côté
+à **son propre état lors de la dernière synchro** (manifeste
+`/switch/RetroManager/sync-state.json`) :
+
+| Local | NAS | Action |
+|---|---|---|
+| modifié | inchangé | envoi |
+| inchangé | modifié | réception |
+| absent / présent seul | | copie vers l'autre côté (**les suppressions ne sont pas propagées**) |
+| modifié | modifié | conflit : le plus récent reste en place, l'autre est **conservé** en `<fichier>.conflict-{local\|remote}-AAAAMMJJ-HHMMSS` (égalité : la console gagne) |
+| première synchro, identiques à 2 s près (FAT) | | à jour |
+
+**Robustesse** : un fichier en échec est rapporté et garde son ancien état
+(il sera retenté) ; les autres continuent. Annulation entre deux fichiers :
+les fichiers déjà échangés le restent, l'état des autres est conservé. Un
+manifeste corrompu ou écrit pour un autre NAS est ignoré (tout devient
+« première synchro » : aucune perte, au pire des copies de conflit). La
+console reste éveillée pendant toute la synchro (`AwakeLock`).
+
+Tests : `CloudSyncTest` (17, mocks FS + NAS avec horloges contrôlées),
+`FtpSaveIntegrationTest` (8 : MLSD, remplacement atomique, envoi par blocs,
+annulation, dossier absent, repli NLST, identifiants), `CloudSyncOverFtp` :
+**deux consoles** (deux cartes SD) contre le même serveur FTP : échanges
+croisés sans ping-pong, puis jeu simultané des deux côtés → les deux versions
+sont gardées.
+
+### 4.5 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
     courtes (chargement de l'index) ;
-  - `WorkerThread`, un thread dédié possédé par `DownloadService`, pour les
-    téléchargements : ils durent des minutes et ne doivent pas bloquer la
+  - `WorkerThread`, un thread dédié possédé par `DownloadService` (et un
+    autre par `CloudSyncService`), pour les téléchargements et la synchro :
+    ils durent des minutes et ne doivent pas bloquer la
     boucle de tâches unique de Borealis ;
   - `ImmediateTaskRunner` ou une file manuelle dans les tests, qui restent
     donc synchrones et déterministes.
@@ -248,15 +309,15 @@ d'intégration mesure la mémoire résidente pendant un téléchargement de
 - `Application::exit()` de Borealis attend la fin du thread de tâches : les
   services créés dans `main()` survivent donc à toute tâche en cours.
 - **EventBus** (`core/EventBus.hpp`) : canal typé services → UI pour les
-  événements qui durent (progression des téléchargements, demain la synchro
+  événements qui durent (progression des téléchargements et de la synchro
   cloud). `publish()` depuis n'importe quel thread ; les handlers tournent
   toujours sur le thread principal ; une `Subscription` détruite n'est plus
   jamais appelée, même pour un événement déjà en file.
-- `DownloadService` possède son `WorkerThread` : son destructeur annule tout
-  et attend la fin du transfert en cours. Dans `main()`, il est déclaré en
-  dernier pour être détruit en premier.
+- `DownloadService` et `CloudSyncService` possèdent leur `WorkerThread` :
+  leur destructeur annule tout et attend la fin du transfert en cours. Dans
+  `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.5 Gestion des erreurs
+### 4.6 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -314,4 +375,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 2 | Boutique : `GameEntry`, `RepoIndexParser`, `IRemoteSource` (mock + FTP), `ShopService`, liste Borealis | ✅ |
 | 3 | `config.json` + vrai `FtpClient`, téléchargement en flux, `RomStore` (espace, CRC, atomique), `EventBus`, écran de progression annulable, FTPS sans vérification | ✅ |
 | 4 | Anti-veille (`ISystem`), `CfgDocument`, `EmulatorConfigurator`, `CheatManager` (`cheat_url`), étapes post-installation, tag « Installé » | ✅ |
-| 5+ | File de téléchargements, sources HTTP/SMB, scraping, overclock sys-clk, cloud saves, forwarders | — |
+| 5 | Envoi FTP en flux + listing (MLSD / NLST), `CloudSyncService` (manifeste, conflits sans perte), `IniDocument`, `SysClkConfigurator`, écran « Synchroniser les sauvegardes » | ✅ |
+| 6+ | File de téléchargements, sources HTTP/SMB, scraping, BIOS, forwarders | — |

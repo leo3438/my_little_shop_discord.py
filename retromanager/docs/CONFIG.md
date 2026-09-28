@@ -14,6 +14,11 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
     "username": "leo",
     "password": "mon-mot-de-passe",
     "verifyTls": false
+  },
+  "saves_url": "ftp://192.168.1.20:21/Saves/",
+  "sysclk": {
+    "enabled": true,
+    "title_id": "05B9D58000000000"
   }
 }
 ```
@@ -23,7 +28,10 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 | `shop.type` | `"ftp"` | `"ftp"` : un vrai serveur. `"mock"` : la boutique de démonstration intégrée (aucun réseau). |
 | `shop.url` | `""` | Emplacement de l'index. `ftp://` ou `ftps://` (FTPS **explicite**, AUTH TLS, comme la plupart des NAS). Une URL qui finit par `/` désigne `<url>index.json`. Port 21 par défaut. Le chemin est relatif au dossier de connexion FTP (la racine du partage sur un NAS). |
 | `shop.username` / `shop.password` | `""` | Identifiants. Vides : `anonymous`, ou ceux inclus dans l'URL (`ftp://user:pass@hote/`). |
-| `shop.verifyTls` | `false` | Vérification du certificat en FTPS. Voir ci-dessous. |
+| `shop.verifyTls` | `false` | Vérification du certificat en FTPS. Voir ci-dessous. Vaut aussi pour `saves_url`. |
+| `saves_url` | `""` | Dossier du NAS pour les sauvegardes cloud (`ftp://` ou `ftps://`). Vide : bouton « Synchroniser les sauvegardes » inactif (message explicatif). Identifiants : ceux de l'URL (`ftp://user:pass@nas/Saves/`), sinon ceux de la boutique **si et seulement si** même hôte et même port, sinon `anonymous`. Le compte doit pouvoir **écrire** dans ce dossier (envoi, renommage, création de sous-dossiers). |
+| `sysclk.enabled` | `true` | Après l'installation d'un jeu N64 / PlayStation / 3DS, règle sys-clk sur 1785 MHz (CPU, portable et dock) pour RetroArch. |
+| `sysclk.title_id` | `"05B9D58000000000"` | Section de `/config/sys-clk/config.ini` à modifier : 16 chiffres hexadécimaux, sinon la configuration est refusée. Voir ci-dessous. |
 
 ## Comportement
 
@@ -34,6 +42,40 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
   corriger sur la carte SD.
 - URL vide, invalide ou non supportée (`http://`, `smb://` pour l'instant) :
   l'application démarre quand même ; l'écran Boutique explique quoi corriger.
+
+## Sauvegardes cloud
+
+- Fichiers synchronisés : `.srm`, `.sav`, `.dsv` du dossier de sauvegardes de
+  RetroArch (`savefile_directory` de `retroarch.cfg`, `/retroarch/saves`
+  par défaut), sous-dossiers compris (3 niveaux).
+- L'état de la dernière synchro est dans `/switch/RetroManager/sync-state.json`.
+  Le supprimer est sans danger : la synchro suivante compare les fichiers
+  comme au premier jour (identiques à 2 s près = à jour, sinon conflit).
+- **Conflit** (modifié des deux côtés) : la version la plus récente est mise
+  en place des deux côtés, l'autre est gardée à côté sous le nom
+  `<fichier>.conflict-local-…` ou `.conflict-remote-…`. Pour revenir à
+  l'autre version, renommez la copie. RetroArch ignore ces copies.
+- **Suppressions non propagées** : un fichier supprimé d'un côté revient de
+  l'autre. Pour supprimer une sauvegarde, supprimez-la des deux côtés.
+- Chaque console devrait avoir l'heure juste (réglage automatique) : l'heure
+  ne sert qu'à départager un conflit.
+
+## sys-clk et title id
+
+sys-clk applique un profil selon le **title id du programme au premier
+plan**. Il dépend de la façon dont RetroArch est lancé :
+
+- `05B9D58000000000` (défaut) : l'identifiant attribué à RetroArch lancé
+  comme titre (forwarder installé, etc.). **Non vérifié sur console** :
+  contrôlez celui qu'affiche l'overlay de sys-clk pendant un jeu.
+- `010000000000100D` : l'applet Album, c'est-à-dire tout homebrew `.nro`
+  lancé depuis le menu hbmenu par l'Album (le profil s'applique alors à
+  tous les homebrews ainsi lancés).
+
+Le fichier n'est modifié que si sys-clk est installé (`/config/sys-clk`
+présent) ; une copie `config.ini.rmbak` est faite avant la première
+modification et le reste du fichier (commentaires, autres titres, section
+`[values]`) est conservé tel quel.
 
 ## FTPS et certificats
 
@@ -55,7 +97,8 @@ serveur FTPS au certificat auto-signé (`tests/integration/FtpDownloadIntegratio
 
 - Le mot de passe est stocké **en clair** sur la carte SD. N'utilisez pas un
   compte administrateur du NAS : créez un compte en **lecture seule** limité
-  au partage des ROMs.
+  au partage des ROMs, et, pour les sauvegardes, un compte (dans
+  `saves_url`) qui n'a le droit d'écrire que dans leur dossier.
 - Les identifiants ne sont envoyés qu'au serveur configuré (même hôte et
   même port). Une entrée d'index pointant ailleurs est refusée
   (`PermissionDenied`) : un index piégé ne peut pas récupérer le mot de passe.

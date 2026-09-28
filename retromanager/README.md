@@ -5,10 +5,17 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 
 ![Boutique (build desktop)](docs/shop-desktop.png)
 ![Téléchargement (build desktop)](docs/download-desktop.png)
+![Synchronisation des sauvegardes (build desktop)](docs/sync-desktop.png)
 
 Après chaque téléchargement, RetroManager règle le navigateur de fichiers de
 RetroArch sur le dossier du jeu (édition de `retroarch.cfg` qui préserve le
 reste du fichier) et installe ses codes de triche si la boutique en fournit.
+Pour les jeux N64 / PlayStation, il règle aussi sys-clk (CPU à 1785 MHz pour
+RetroArch).
+
+Le bouton « Synchroniser les sauvegardes » échange les `.srm` / `.sav` de
+RetroArch avec un dossier du NAS (`saves_url`), dans les deux sens, sans
+jamais perdre une version en cas de conflit.
 
 L'organisation du code est décrite dans [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -36,11 +43,15 @@ Toutes les commandes se lancent depuis `retromanager/`.
 cmake --preset tests && cmake --build --preset tests && ctest --preset tests
 
 # App desktop + tests, sur une fausse carte SD dont config.json pointe vers
-# ftp://127.0.0.1:2121 (serveur de test, limité à 8 Mo/s pour voir la progression)
+# ftp://127.0.0.1:2121 (serveur de test, limité à 8 Mo/s pour voir la progression ;
+# boutique dans /shop, sauvegardes cloud dans /saves, accessible en écriture)
 python3 tools/make_mock_sd.py          # crée ./sdmc à partir de tests/fixtures/sd_card
 python3 tools/test_ftp_server.py --port 2121 --throttle-kbps 8192 &
 cmake --preset desktop && cmake --build --preset desktop
 ./build/desktop/RetroManager           # -d : logs debug, -v : vue de debug
+
+# Interface en français (sur Switch : langue de la console)
+RETROMANAGER_LANG=fr ./build/desktop/RetroManager
 
 # Autre fausse SD
 RETROMANAGER_SD_ROOT=/chemin/vers/sd ./build/desktop/RetroManager
