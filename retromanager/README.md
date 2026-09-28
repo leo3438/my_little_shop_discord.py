@@ -6,6 +6,10 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Boutique (build desktop)](docs/shop-desktop.png)
 ![Téléchargement (build desktop)](docs/download-desktop.png)
 
+Après chaque téléchargement, RetroManager règle le navigateur de fichiers de
+RetroArch sur le dossier du jeu (édition de `retroarch.cfg` qui préserve le
+reste du fichier) et installe ses codes de triche si la boutique en fournit.
+
 L'organisation du code est décrite dans [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Prérequis

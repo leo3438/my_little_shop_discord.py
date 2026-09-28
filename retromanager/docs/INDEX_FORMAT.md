@@ -57,6 +57,7 @@ Tout autre champ est ignoré (compatibilité ascendante).
 | `crc32` | 8 chiffres hexadécimaux, **vérifié après téléchargement** (fichier rejeté si différent) | vide |
 | `year` | entier entre 1950 et 2100 | absent |
 | `description` | chaîne | vide |
+| `cheat_url` | chaîne (URL, relative acceptée) d'un fichier de triche RetroArch `.cht`, téléchargé après la ROM | vide |
 | `id` | chaîne unique dans l'index | `<system>/<nom de fichier>` |
 
 ### URLs
@@ -76,6 +77,15 @@ Les identifiants du NAS ne sont envoyés qu'au serveur de l'index (même hôte,
 même port) : une entrée pointant vers un autre serveur est refusée au
 téléchargement. Les ROMs sont installées dans `/roms/<system>/<nom>` ; les
 caractères interdits sur FAT/exFAT (`<>:"|?*`) deviennent `_`.
+
+### Codes de triche
+
+Le `.cht` est installé dans
+`/retroarch/cheats/<système libretro>/<nom de la ROM sans extension>.cht`
+(par exemple `Nintendo - Nintendo DS/Pokemon Platine (France).cht`), ou
+sous le `cheat_database_path` de `retroarch.cfg` s'il est absolu. Il doit
+contenir une ligne `cheats = N`, sinon il est refusé (page d'erreur HTML,
+fichier tronqué…). Au maximum 1 Mio.
 
 ### Identifiants de système
 

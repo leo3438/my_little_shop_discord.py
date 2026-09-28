@@ -31,11 +31,11 @@ contredit, on modifie d'abord ce document.
 ```mermaid
 graph TD
     UI["ui/ : Activities & vues Borealis"]
-    SVC["services/ : ShopService ✅, DownloadService ✅, ConfigManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
-    PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgParser, IniParser, ChtParser"]
+    SVC["services/ : ShopService ✅, DownloadService ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
+    PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgDocument ✅, IniParser, ChtParser"]
     FS["fs/ : RomStore ✅, SaveStore, BiosStore"]
     NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SourceFactory ✅, SmbClient, HttpClient"]
-    PLAT["platform/ : IFileSystem, VirtualPath, SdLayout, Platform"]
+    PLAT["platform/ : IFileSystem, ISystem, VirtualPath, SdLayout, Platform"]
     CORE["core/ : Result, AppContext, ITaskRunner, WorkerThread, EventBus, Cancellation, Crc32, Url, Format"]
     MODELS["models/ : GameEntry, RepoIndex, Systems, AppConfig"]
 
@@ -58,8 +58,8 @@ graph TD
 |---|---|---|---|
 | `core/` | Types de base (`Result`, `Status`), composition (`AppContext`), exécution (`ITaskRunner`, `WorkerThread`, `CancellationToken`), `EventBus`, utilitaires purs (`Url`, `Format`, `Crc32`) | STL | inclure Borealis ou libnx |
 | `models/` | Données pures partagées par toutes les couches (`GameEntry`, `RepoIndex`, `SystemSection`, `AppConfig`) et catalogue des systèmes | `core` | contenir du comportement autre que des accesseurs |
-| `platform/` | Abstractions système + implémentations par plateforme | `core` | contenir de la logique métier |
-| `parsers/` | Fonctions **pures** texte ⇄ structures (`.cfg`, `.ini`, JSON, `.cht`) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
+| `platform/` | Abstractions système (`IFileSystem`, `ISystem` : anti-veille) + implémentations par plateforme | `core` | contenir de la logique métier |
+| `parsers/` | Fonctions **pures** texte ⇄ structures : index JSON, `config.json`, `CfgDocument` (`.cfg` / `.cht` RetroArch, édition sans perte) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
 | `fs/` | Opérations SD typées : `RomStore` (destination, espace libre, installation atomique vérifiée par CRC) | `platform`, `models`, `core` | parler au réseau |
 | `network/` | Déplace des octets derrière `IRemoteSource` (index en mémoire, ROMs en flux vers un `ChunkSink`) | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD |
 | `services/` | Cas d'usage : orchestrent parsers, fs et network | tout ce qui précède | inclure Borealis |
@@ -203,9 +203,26 @@ sequenceDiagram
     end
     UI->>D: cancel(id) sur B → token → curl abandonne, .tmp supprimé
     D->>F: commit() : CRC vérifié puis renommage atomique
-    D-->>B: Finished{ok | Cancelled | NetworkError | IntegrityError…}
+    D-->>B: Configuring
+    D->>D: étapes post-installation (EmulatorConfigurator, CheatManager)
+    D-->>B: Finished{résultat ROM + résultat de chaque étape}
     B-->>UI: handlers exécutés sur le thread principal
 ```
+
+Pendant tout le travail (transfert et étapes), un `AwakeLock` tient la
+console éveillée (`ISystem::setKeepAwake` : `appletSetMediaPlaybackState`
+sur Switch, rien sur desktop). Il est relâché sur tous les chemins de sortie
+(succès, erreur, annulation, refus faute d'espace).
+
+**Étapes post-installation** (`services/PostInstallStep.hpp`) :
+`DownloadService` exécute, dans l'ordre, les `IPostInstallStep` enregistrés
+dans `main.cpp`, une fois la ROM validée sur la carte. Une étape en échec ne
+défait jamais l'installation : son erreur est rapportée à côté.
+
+| Étape | Effet |
+|---|---|
+| `EmulatorConfigurator` | `rgui_browser_directory` de `retroarch.cfg` pointe sur le dossier de la ROM (`/roms/nds/`). Édition via `CfgDocument` : seule la valeur change, tout le reste du fichier est conservé octet pour octet. Copie `retroarch.cfg.rmbak` avant la première modification ; fichier créé s'il n'existe pas ; rien si RetroArch n'est pas installé. |
+| `CheatManager` | Si l'entrée a un `cheat_url` : télécharge le `.cht` (1 Mio max, validé comme fichier de triche RetroArch) dans `<cheat_database_path>/<système libretro>/<nom de la ROM>.cht`. |
 
 La mémoire consommée ne dépend pas de la taille de la ROM : tampon
 d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
@@ -296,4 +313,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 0–1 | Squelette, `IFileSystem` avec mocks, fausse SD, écran d'accueil, CI | ✅ |
 | 2 | Boutique : `GameEntry`, `RepoIndexParser`, `IRemoteSource` (mock + FTP), `ShopService`, liste Borealis | ✅ |
 | 3 | `config.json` + vrai `FtpClient`, téléchargement en flux, `RomStore` (espace, CRC, atomique), `EventBus`, écran de progression annulable, FTPS sans vérification | ✅ |
-| 4+ | Marqueur « installé » et file de téléchargements, SMB/HTTP, scraping, configurateur RetroArch, cheats, cloud saves, forwarders | — |
+| 4 | Anti-veille (`ISystem`), `CfgDocument`, `EmulatorConfigurator`, `CheatManager` (`cheat_url`), étapes post-installation, tag « Installé » | ✅ |
+| 5+ | File de téléchargements, sources HTTP/SMB, scraping, overclock sys-clk, cloud saves, forwarders | — |
