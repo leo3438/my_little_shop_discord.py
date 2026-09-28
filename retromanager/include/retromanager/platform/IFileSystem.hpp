@@ -15,14 +15,18 @@ enum class EntryType { File, Directory };
 
 struct FileInfo {
     EntryType type;
-    std::uint64_t size;  // 0 for directories
+    std::uint64_t size;           // 0 for directories
+    std::int64_t modifiedAt = 0;  // last modification, seconds since the Unix epoch (UTC)
 };
 
 struct DirEntry {
     std::string name;  // bare name, no path
     EntryType type;
     std::uint64_t size;
+    std::int64_t modifiedAt = 0;  // same as FileInfo::modifiedAt
 
+    // Compares name, type and size only: timestamps are rarely what a
+    // listing comparison is about.
     bool operator==(const DirEntry& other) const {
         return name == other.name && type == other.type && size == other.size;
     }

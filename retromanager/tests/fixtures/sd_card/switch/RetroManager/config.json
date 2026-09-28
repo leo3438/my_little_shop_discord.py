@@ -6,5 +6,6 @@
     "username": "retro",
     "password": "manager",
     "verifyTls": false
-  }
+  },
+  "saves_url": "ftp://127.0.0.1:2121/saves/"
 }

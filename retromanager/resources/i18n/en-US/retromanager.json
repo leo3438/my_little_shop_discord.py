@@ -10,8 +10,10 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 4 - RetroArch & cheats",
-        "shop": "Shop: {}"
+        "version": "v{} - Phase 5 - Cloud saves & sys-clk",
+        "shop": "Shop: {}",
+        "saves": "Cloud saves: {}",
+        "saves_not_configured": "Cloud saves: not configured (saves_url)"
     },
     "shop": {
         "title": "Shop",
@@ -50,6 +52,30 @@
         "step_cheats_ok": "Cheats installed (RetroArch menu > Cheats > Load Cheat File).",
         "step_cheats_missing": "Cheats skipped: RetroArch is not installed or the cheat file is missing.",
         "step_cheats_failed": "Cheats could not be installed ({}).",
-        "please_wait": "Please wait..."
+        "please_wait": "Please wait...",
+        "step_sysclk_ok": "sys-clk: CPU at 1785 MHz for RetroArch.",
+        "step_sysclk_missing": "sys-clk is not installed: clocks unchanged.",
+        "step_sysclk_failed": "Cannot configure sys-clk ({})."
+    },
+    "sync": {
+        "title": "Cloud saves",
+        "open": "Sync saves",
+        "heading": "Save synchronization",
+        "scanning": "Comparing the saves on the SD card and on the NAS...",
+        "action_upload": "Sending",
+        "action_download": "Receiving",
+        "action_conflict": "Conflict (both versions kept)",
+        "action_in_sync": "Up to date",
+        "cancelling": "Cancelling after the current file...",
+        "cancelled": "Synchronization cancelled",
+        "already_running": "A synchronization is still stopping: try again in a moment.",
+        "done": "Synchronization complete: {} sent, {} received",
+        "unchanged": "{} already up to date",
+        "conflicts": "{} conflict(s): the newest version is in place, the other one is kept next to it:",
+        "failures": "{} file(s) failed:",
+        "error_not_configured": "Cloud saves are not configured: add \"saves_url\" (e.g. ftp://nas/Saves/) to /switch/RetroManager/config.json.",
+        "error_network": "Cannot reach the saves NAS. Check the network.",
+        "error_denied": "Access denied (read-only NAS folder, or protected SD card).",
+        "error_generic": "The synchronization failed."
     }
 }

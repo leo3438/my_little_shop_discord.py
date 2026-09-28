@@ -25,11 +25,19 @@
             style="primary"
             width="400"
             text="@i18n/retromanager/shop/open"
+            marginBottom="16" />
+
+        <brls:Button
+            id="home/sync_saves"
+            style="bordered"
+            width="400"
+            text="@i18n/retromanager/sync/open"
             marginBottom="40" />
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/shop" horizontalAlign="center" marginBottom="10" />
+        <brls:Label id="home/saves" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/retroarch" horizontalAlign="center" />
 
         <brls:Label

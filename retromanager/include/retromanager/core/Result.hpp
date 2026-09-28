@@ -57,7 +57,9 @@ class [[nodiscard]] Result {
         assert(ok());
         return std::get<T>(data_);
     }
-    T&& value() && {
+    // By value on temporaries: `for (auto& e : f().value())` stays valid
+    // (a T&& would dangle once the temporary Result dies).
+    T value() && {
         assert(ok());
         return std::get<T>(std::move(data_));
     }

@@ -1,0 +1,69 @@
+<brls:AppletFrame>
+    <brls:Box
+        id="sync/root"
+        title="@i18n/retromanager/sync/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        justifyContent="center"
+        grow="1.0">
+
+        <brls:Label
+            text="@i18n/retromanager/sync/heading"
+            fontSize="30"
+            horizontalAlign="center"
+            marginBottom="8" />
+
+        <brls:Label
+            id="sync/remote"
+            fontSize="16"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="40" />
+
+        <!-- Progress bar: files handled / files to look at. -->
+        <brls:Box
+            id="sync/track"
+            width="800"
+            height="14"
+            cornerRadius="7"
+            backgroundColor="@theme/brls/backdrop"
+            marginBottom="16">
+            <brls:Rectangle
+                id="sync/fill"
+                width="0"
+                height="14"
+                cornerRadius="7"
+                color="@theme/brls/accent" />
+        </brls:Box>
+
+        <brls:Label
+            id="sync/stats"
+            fontSize="18"
+            horizontalAlign="center"
+            marginBottom="24" />
+
+        <brls:Label
+            id="sync/status"
+            width="900"
+            horizontalAlign="center"
+            marginBottom="16" />
+
+        <!-- Summary details: unchanged files, conflict copies, failures. -->
+        <brls:Label
+            id="sync/details"
+            width="900"
+            fontSize="18"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="32" />
+
+        <brls:Button
+            id="sync/action"
+            style="bordered"
+            width="300"
+            text="@i18n/retromanager/download/cancel" />
+    </brls:Box>
+</brls:AppletFrame>

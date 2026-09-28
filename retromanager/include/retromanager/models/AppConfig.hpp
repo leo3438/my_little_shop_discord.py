@@ -25,11 +25,24 @@ struct ShopConfig {
     }
 };
 
+// sys-clk overclocking profile written after installing N64/PS1/3DS games.
+struct SysClkSettings {
+    bool enabled = true;
+    // Title id sys-clk sees while RetroArch runs (see docs/CONFIG.md).
+    std::string titleId = "05B9D58000000000";
+
+    bool operator==(const SysClkSettings& o) const { return enabled == o.enabled && titleId == o.titleId; }
+};
+
 struct AppConfig {
     static constexpr int kVersion = 1;
     ShopConfig shop;
+    // Folder receiving the save files, e.g. "ftp://nas.local/Saves/". Empty =
+    // cloud saves disabled. Uses the shop credentials when on the same server.
+    std::string savesUrl;
+    SysClkSettings sysclk;
 
-    bool operator==(const AppConfig& o) const { return shop == o.shop; }
+    bool operator==(const AppConfig& o) const { return shop == o.shop && savesUrl == o.savesUrl && sysclk == o.sysclk; }
 };
 
 }  // namespace rm

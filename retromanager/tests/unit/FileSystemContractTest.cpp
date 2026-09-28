@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <ctime>
 #include <memory>
 
 #include "MemoryFileSystem.hpp"
@@ -343,6 +344,33 @@ TYPED_TEST(FileSystemContract, RenameErrors) {
     ASSERT_FALSE(noParent.ok());
     EXPECT_EQ(noParent.error().code, ErrorCode::NotFound);
     EXPECT_TRUE(this->fs.exists("/file"));
+}
+
+// --- modification time ---------------------------------------------------
+
+TYPED_TEST(FileSystemContract, FilesCarryTheirModificationTime) {
+    const std::int64_t before = static_cast<std::int64_t>(std::time(nullptr));
+    this->mkdirs("/saves");
+    this->write("/saves/Game.srm", "save");
+    const std::int64_t after = static_cast<std::int64_t>(std::time(nullptr));
+
+    auto info = this->fs.stat("/saves/Game.srm");
+    ASSERT_TRUE(info.ok());
+    // Seconds since the Unix epoch, UTC. FAT only stores 2 s steps.
+    EXPECT_GE(info.value().modifiedAt, before - 2);
+    EXPECT_LE(info.value().modifiedAt, after + 2);
+
+    auto listed = this->fs.listDirectory("/saves");
+    ASSERT_TRUE(listed.ok());
+    ASSERT_EQ(listed.value().size(), 1u);
+    EXPECT_EQ(listed.value()[0].modifiedAt, info.value().modifiedAt);
+}
+
+TYPED_TEST(FileSystemContract, RenameKeepsTheModificationTime) {
+    this->write("/a.srm", "x");
+    std::int64_t original = this->fs.stat("/a.srm").value().modifiedAt;
+    ASSERT_TRUE(this->fs.rename("/a.srm", "/b.srm").ok());
+    EXPECT_EQ(this->fs.stat("/b.srm").value().modifiedAt, original);
 }
 
 // --- free space ----------------------------------------------------------

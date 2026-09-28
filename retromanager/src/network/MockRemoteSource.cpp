@@ -109,18 +109,115 @@ Result<std::string> MockRemoteSource::fetchIndex() {
     return document_;
 }
 
-void MockRemoteSource::addFile(const std::string& url, std::string content) {
+std::string MockRemoteSource::canonical(const std::string& target) {
+    std::size_t scheme = target.find("://");
+    if (scheme == std::string::npos) return target;
+    std::size_t pathStart = target.find('/', scheme + 3);
+    if (pathStart == std::string::npos) return target + "/";
+    std::string path = target.substr(pathStart);
+    path = path.substr(0, path.find_first_of("?#"));
+    return target.substr(0, pathStart) + url::percentEncodePath(url::percentDecode(path));
+}
+
+void MockRemoteSource::registerParents(const std::string& canonicalUrl) {
+    std::size_t scheme = canonicalUrl.find("://");
+    std::size_t rootSlash = canonicalUrl.find('/', scheme + 3);
+    for (std::size_t slash = canonicalUrl.find('/', rootSlash + 1); slash != std::string::npos;
+         slash = canonicalUrl.find('/', slash + 1)) {
+        directories_.insert(canonicalUrl.substr(0, slash + 1));
+    }
+}
+
+void MockRemoteSource::addFile(const std::string& target, std::string content) {
     File file;
     file.size = content.size();
     file.content = std::move(content);
-    files_[url] = std::move(file);
+    file.modifiedAt = clock_();
+    std::string key = canonical(target);
+    registerParents(key);
+    files_[key] = std::move(file);
 }
 
-void MockRemoteSource::addSyntheticFile(const std::string& url, std::uint64_t size) {
+void MockRemoteSource::addSyntheticFile(const std::string& target, std::uint64_t size) {
     File file;
     file.size = size;
     file.synthetic = true;
-    files_[url] = std::move(file);
+    file.modifiedAt = clock_();
+    std::string key = canonical(target);
+    registerParents(key);
+    files_[key] = std::move(file);
+}
+
+void MockRemoteSource::addDirectory(const std::string& target) {
+    std::string key = canonical(target);
+    if (key.back() != '/') key += '/';
+    registerParents(key);
+    directories_.insert(key);
+}
+
+std::optional<std::string> MockRemoteSource::fileContent(const std::string& target) const {
+    auto it = files_.find(canonical(target));
+    if (it == files_.end() || it->second.synthetic) return std::nullopt;
+    return it->second.content;
+}
+
+void MockRemoteSource::setFileTime(const std::string& target, std::int64_t modifiedAt) {
+    auto it = files_.find(canonical(target));
+    if (it != files_.end()) it->second.modifiedAt = modifiedAt;
+}
+
+Result<std::vector<RemoteEntry>> MockRemoteSource::listDirectory(const std::string& target) {
+    if (latency_.count() > 0) std::this_thread::sleep_for(latency_);
+    if (failure_) return *failure_;
+    std::string prefix = canonical(target);
+    if (prefix.back() != '/') prefix += '/';
+
+    std::vector<RemoteEntry> entries;
+    std::set<std::string> seenDirectories;
+    for (const auto& [key, file] : files_) {
+        if (key.compare(0, prefix.size(), prefix) != 0) continue;
+        std::string rest = key.substr(prefix.size());
+        std::size_t slash = rest.find('/');
+        if (slash != std::string::npos) {
+            seenDirectories.insert(url::percentDecode(rest.substr(0, slash)));
+            continue;
+        }
+        entries.push_back(RemoteEntry{url::percentDecode(rest), false, file.size, file.modifiedAt});
+    }
+    for (const std::string& dir : directories_) {
+        if (dir.size() <= prefix.size() || dir.compare(0, prefix.size(), prefix) != 0) continue;
+        std::string rest = dir.substr(prefix.size());
+        seenDirectories.insert(url::percentDecode(rest.substr(0, rest.find('/'))));
+    }
+    for (const std::string& name : seenDirectories) entries.push_back(RemoteEntry{name, true, 0, std::nullopt});
+
+    if (entries.empty() && directories_.count(prefix) == 0) return makeError(ErrorCode::NotFound, "mock: no directory " + target);
+    return entries;
+}
+
+Status MockRemoteSource::uploadFile(const std::string& target, const ChunkReader& reader, std::uint64_t size,
+                                    const ProgressCallback& progress, const CancellationToken& cancel) {
+    if (latency_.count() > 0) std::this_thread::sleep_for(latency_);
+    if (failure_) return *failure_;
+
+    std::string staged;  // committed only once complete: the remote side stays atomic
+    std::vector<char> buffer(chunkSize_);
+    while (true) {
+        if (cancel.isCancelled()) return makeError(ErrorCode::Cancelled, "upload cancelled");
+        auto count = reader(buffer.data(), buffer.size());
+        if (!count) return count.error();
+        if (count.value() == 0) break;
+        staged.append(buffer.data(), count.value());
+        if (progress) progress(TransferProgress{staged.size(), size});
+    }
+    if (cancel.isCancelled()) return makeError(ErrorCode::Cancelled, "upload cancelled");
+    if (staged.size() != size) {
+        return makeError(ErrorCode::IoError, "upload of " + target + ": expected " + std::to_string(size) + " bytes, got " +
+                                                 std::to_string(staged.size()));
+    }
+    ++uploadCount_;
+    addFile(target, std::move(staged));
+    return success();
 }
 
 Status MockRemoteSource::downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
@@ -129,7 +226,7 @@ Status MockRemoteSource::downloadFile(const std::string& url, const ChunkSink& s
     if (latency_.count() > 0) std::this_thread::sleep_for(latency_);
     if (failure_) return *failure_;
 
-    auto it = files_.find(url);
+    auto it = files_.find(canonical(url));
     if (it == files_.end()) return makeError(ErrorCode::NotFound, "mock: no such file " + url);
     const File& file = it->second;
 

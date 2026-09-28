@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ctime>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -36,6 +38,11 @@ class MemoryFileSystem : public IFileSystem {
     void setCapacity(std::optional<std::uint64_t> bytes) { capacity_ = bytes; }
     std::uint64_t usedBytes() const;
 
+    // Test hook: the clock stamping writes (default: the real time), and a
+    // way to backdate a file.
+    void setClock(std::function<std::int64_t()> clock) { clock_ = std::move(clock); }
+    Status setModificationTime(std::string_view path, std::int64_t modifiedAt);
+
     // Number of files and directories, root excluded.
     std::size_t nodeCount() const { return nodes_.size() - 1; }
 
@@ -43,6 +50,7 @@ class MemoryFileSystem : public IFileSystem {
     struct Node {
         EntryType type;
         std::shared_ptr<const std::string> data;  // files only
+        std::int64_t modifiedAt = 0;
     };
 
     friend class MemoryWriteStream;
@@ -58,6 +66,7 @@ class MemoryFileSystem : public IFileSystem {
 
     NodeMap nodes_;  // key: normalized virtual path
     bool readOnly_ = false;
+    std::function<std::int64_t()> clock_ = [] { return static_cast<std::int64_t>(std::time(nullptr)); };
     std::optional<std::uint64_t> capacity_ = 64ull * 1024 * 1024 * 1024;
 };
 

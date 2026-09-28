@@ -40,6 +40,11 @@ std::string describeStep(const StepOutcome& step, const std::string& romFolder) 
         if (missing) return brls::getStr("retromanager/download/step_cheats_missing");
         return brls::getStr("retromanager/download/step_cheats_failed", step.result.error().describe());
     }
+    if (step.id == "sysclk") {
+        if (ok) return brls::getStr("retromanager/download/step_sysclk_ok");
+        if (missing) return brls::getStr("retromanager/download/step_sysclk_missing");
+        return brls::getStr("retromanager/download/step_sysclk_failed", step.result.error().describe());
+    }
     return step.id + ": " + (ok ? "OK" : step.result.error().describe());
 }
 

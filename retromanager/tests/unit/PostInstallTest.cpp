@@ -254,3 +254,95 @@ TEST(PostInstallScenario, DsDownloadConfiguresRetroArchAndInstallsCheats) {
     ASSERT_TRUE(cht.ok());
     EXPECT_EQ(CfgDocument::parse(cht.value()).get("cheats"), "2");
 }
+
+// --- SysClkConfigurator ------------------------------------------------------
+
+#include "retromanager/parsers/IniDocument.hpp"
+#include "retromanager/services/SysClkConfigurator.hpp"
+
+namespace {
+
+const char* kSysClkIni = "/config/sys-clk/config.ini";
+
+GameEntry gameFor(const std::string& system) {
+    GameEntry game;
+    game.id = system + "/Game";
+    game.system = system;
+    game.fileName = "Game";
+    return game;
+}
+
+}  // namespace
+
+TEST(SysClkConfigurator, OnlyDemandingSystemsAreBoosted) {
+    auto sd = test::makeMockSdCard();
+    SysClkConfigurator sysclk(*sd, SdLayout{});
+    CancellationToken cancel;
+    EXPECT_FALSE(sysclk.run(gameFor("snes"), "/roms/snes/Game", cancel).has_value());
+    EXPECT_FALSE(sysclk.run(gameFor("nds"), "/roms/nds/Game", cancel).has_value());
+    for (const char* system : {"n64", "psx", "3ds"}) {
+        auto result = sysclk.run(gameFor(system), "/roms/x/Game", cancel);
+        ASSERT_TRUE(result.has_value()) << system;
+        EXPECT_TRUE(result->ok()) << system;
+    }
+}
+
+TEST(SysClkConfigurator, AddsTheRetroArchProfileAndKeepsTheRest) {
+    auto sd = test::makeMockSdCard();
+    const std::string before = sd->readFile(kSysClkIni).value();
+    SysClkConfigurator sysclk(*sd, SdLayout{});
+
+    ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
+
+    const std::string after = sd->readFile(kSysClkIni).value();
+    EXPECT_EQ(after.substr(0, before.size()), before);  // existing content untouched, profile appended
+    IniDocument ini = IniDocument::parse(after);
+    EXPECT_EQ(ini.get("05B9D58000000000", "handheld_cpu"), "1785");
+    EXPECT_EQ(ini.get("05B9D58000000000", "docked_cpu"), "1785");
+    EXPECT_EQ(ini.get("010000000000100D", "docked_cpu"), "1785");  // user's own profile still there
+    EXPECT_EQ(sd->readFile(sysclk.backupPath()).value(), before);
+}
+
+TEST(SysClkConfigurator, RaisesAnExistingProfileWithoutTouchingItsOtherKeys) {
+    auto sd = test::makeMockSdCard();
+    ASSERT_TRUE(sd->writeFile(kSysClkIni, "[05b9d58000000000]\nhandheld_cpu=1020\nhandheld_gpu=307\n").ok());
+    SysClkConfigurator sysclk(*sd, SdLayout{});
+
+    ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
+    EXPECT_EQ(sd->readFile(kSysClkIni).value(),
+              "[05b9d58000000000]\nhandheld_cpu=1785\nhandheld_gpu=307\ndocked_cpu=1785\n");
+}
+
+TEST(SysClkConfigurator, IsIdempotent) {
+    auto sd = test::makeMockSdCard();
+    SysClkConfigurator sysclk(*sd, SdLayout{});
+    ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
+    sd->setReadOnly(true);  // a second run must not write anything
+    EXPECT_TRUE(sysclk.applyMaxCpuProfile().ok());
+}
+
+TEST(SysClkConfigurator, CreatesConfigIniWhenSysClkHasNone) {
+    auto sd = test::makeMockSdCard();
+    ASSERT_TRUE(sd->remove(kSysClkIni).ok());
+    SysClkConfigurator sysclk(*sd, SdLayout{}, "0100000000001000");
+
+    ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
+    EXPECT_EQ(sd->readFile(kSysClkIni).value(), "[0100000000001000]\nhandheld_cpu=1785\ndocked_cpu=1785\n");
+    EXPECT_FALSE(sd->exists(sysclk.backupPath()));
+}
+
+TEST(SysClkConfigurator, SkipsWhenSysClkIsNotInstalled) {
+    test::MemoryFileSystem fs;
+    SysClkConfigurator sysclk(fs, SdLayout{});
+    Status status = sysclk.applyMaxCpuProfile();
+    EXPECT_EQ(status.error().code, ErrorCode::NotFound);
+    EXPECT_EQ(fs.nodeCount(), 0u);
+}
+
+TEST(SysClkConfigurator, ValidatesTitleIds) {
+    EXPECT_TRUE(SysClkConfigurator::isValidTitleId("05B9D58000000000"));
+    EXPECT_TRUE(SysClkConfigurator::isValidTitleId("010000000000100d"));
+    EXPECT_FALSE(SysClkConfigurator::isValidTitleId("05B9D580"));
+    EXPECT_FALSE(SysClkConfigurator::isValidTitleId("05B9D5800000000G"));
+    EXPECT_FALSE(SysClkConfigurator::isValidTitleId(""));
+}

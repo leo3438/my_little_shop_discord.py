@@ -12,10 +12,12 @@
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/platform/Platform.hpp"
 #include "retromanager/services/CheatManager.hpp"
+#include "retromanager/services/CloudSyncService.hpp"
 #include "retromanager/services/ConfigManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/ShopService.hpp"
+#include "retromanager/services/SysClkConfigurator.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
 
@@ -50,29 +52,50 @@ void configureMockFromEnvironment(rm::MockRemoteSource& source) {
     }
 }
 
-// config.json -> the shop source. Problems never prevent the app from
-// starting: they surface in the shop screen instead.
-std::unique_ptr<rm::IRemoteSource> createShopSource(rm::AppContext& context) {
+// Everything built from config.json. Problems never prevent the app from
+// starting: they surface in the shop / sync screens instead.
+struct RemoteSources {
+    std::unique_ptr<rm::IRemoteSource> shop;
+    std::unique_ptr<rm::IRemoteSource> saves;
+    std::string savesBaseUrl;  // empty = cloud saves not configured
+    rm::SysClkSettings sysclk;
+};
+
+RemoteSources createRemoteSources(rm::AppContext& context) {
+    RemoteSources sources;
     rm::ConfigManager configManager(context.fileSystem(), context.layout().appConfig);
     auto config = configManager.loadOrCreate();
     if (!config) {
         brls::Logger::error("Configuration: {}", config.error().describe());
-        return std::make_unique<rm::UnavailableRemoteSource>(
-            rm::makeError(rm::ErrorCode::NotConfigured, config.error().message), configManager.path());
+        rm::Error error = rm::makeError(rm::ErrorCode::NotConfigured, config.error().message);
+        sources.shop = std::make_unique<rm::UnavailableRemoteSource>(error, configManager.path());
+        sources.saves = std::make_unique<rm::UnavailableRemoteSource>(error, configManager.path());
+        return sources;
     }
 
-    std::unique_ptr<rm::IRemoteSource> source;
 #ifdef RM_WITH_CURL
-    source = rm::createRemoteSource(config.value().shop);
+    sources.shop = rm::createRemoteSource(config.value().shop);
+    rm::SavesSource saves = rm::createSavesSource(config.value());
+    sources.saves = std::move(saves.source);
+    sources.savesBaseUrl = std::move(saves.baseUrl);
 #else
-    source = config.value().shop.type == "mock"
-                 ? std::unique_ptr<rm::IRemoteSource>(rm::MockRemoteSource::createDemo())
-                 : std::make_unique<rm::UnavailableRemoteSource>(
-                       rm::makeError(rm::ErrorCode::Unsupported, "built without libcurl (RM_WITH_CURL=OFF)"), "ftp");
+    rm::Error noCurl = rm::makeError(rm::ErrorCode::Unsupported, "built without libcurl (RM_WITH_CURL=OFF)");
+    if (config.value().shop.type == "mock") {
+        sources.shop = rm::MockRemoteSource::createDemo();
+        auto demoNas = std::make_unique<rm::MockRemoteSource>("{}", "");
+        demoNas->addDirectory("ftp://mock.local/Saves/");
+        sources.saves = std::move(demoNas);
+        sources.savesBaseUrl = "ftp://mock.local/Saves/";
+    } else {
+        sources.shop = std::make_unique<rm::UnavailableRemoteSource>(noCurl, "ftp");
+        sources.saves = std::make_unique<rm::UnavailableRemoteSource>(noCurl, "ftp");
+    }
 #endif
-    if (auto* mock = dynamic_cast<rm::MockRemoteSource*>(source.get())) configureMockFromEnvironment(*mock);
-    brls::Logger::info("Shop source: {}", source->describe());
-    return source;
+    sources.sysclk = config.value().sysclk;
+    if (auto* mock = dynamic_cast<rm::MockRemoteSource*>(sources.shop.get())) configureMockFromEnvironment(*mock);
+    brls::Logger::info("Shop source: {}", sources.shop->describe());
+    brls::Logger::info("Cloud saves: {}", sources.savesBaseUrl.empty() ? "(not configured)" : sources.savesBaseUrl);
+    return sources;
 }
 
 }  // namespace
@@ -90,7 +113,10 @@ int main(int argc, char* argv[]) {
     rm::Status initStatus = context.initialize();
     if (!initStatus) brls::Logger::error("RetroManager init failed: {}", initStatus.error().describe());
 
-    brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
+    // The console language on Switch. On desktop, Borealis only maps a few
+    // LANG values: RETROMANAGER_LANG=fr forces one.
+    const char* forcedLocale = std::getenv("RETROMANAGER_LANG");
+    brls::Platform::APP_LOCALE_DEFAULT = forcedLocale ? forcedLocale : brls::LOCALE_AUTO;
     if (!brls::Application::init()) {
         brls::Logger::error("Unable to init Borealis application");
         return EXIT_FAILURE;
@@ -100,21 +126,27 @@ int main(int argc, char* argv[]) {
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
     brls::Application::setGlobalQuit(true);  // + quits from any screen
 
-    // Declaration order matters: destroyed in reverse, DownloadService goes
-    // first (cancels and joins its worker) while everything it uses lives.
-    std::unique_ptr<rm::IRemoteSource> shopSource = createShopSource(context);
+    // Declaration order matters: destroyed in reverse, the services with a
+    // worker (sync, downloads) go first (cancel and join) while everything
+    // they use still lives.
+    RemoteSources remotes = createRemoteSources(context);
     rm::ui::BorealisTaskRunner uiTasks;
     rm::EventBus bus(uiTasks);
+    auto onMainThread = [](std::function<void()> task) { brls::sync(task); };
     rm::RomStore romStore(context.fileSystem(), context.layout());
-    rm::ShopService shop(*shopSource, uiTasks, &romStore);
+    rm::ShopService shop(*remotes.shop, uiTasks, &romStore);
     rm::EmulatorConfigurator emulatorConfigurator(context.fileSystem(), context.layout());
-    rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *shopSource);
-    rm::DownloadService downloads(*shopSource, romStore, bus, *platform.system,
-                                  std::make_unique<rm::WorkerThread>([](std::function<void()> task) { brls::sync(task); }));
+    rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shop);
+    rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.sysclk.titleId);
+    rm::DownloadService downloads(*remotes.shop, romStore, bus, *platform.system,
+                                  std::make_unique<rm::WorkerThread>(onMainThread));
     downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch at it
     downloads.addPostInstallStep(cheatManager);          // then its cheats, when the shop has some
+    if (remotes.sysclk.enabled) downloads.addPostInstallStep(sysClk);  // N64/PS1/3DS: full CPU speed
+    rm::CloudSyncService cloudSync(context.fileSystem(), context.layout(), *remotes.saves, remotes.savesBaseUrl, bus,
+                                   *platform.system, std::make_unique<rm::WorkerThread>(onMainThread));
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, bus));
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bus));
 
     while (brls::Application::mainLoop()) {
     }

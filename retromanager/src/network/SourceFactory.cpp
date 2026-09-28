@@ -50,4 +50,52 @@ std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop) {
     return std::make_unique<FtpClient>(std::move(ftp.value()));
 }
 
+SavesSource createSavesSource(const AppConfig& config) {
+    if (config.savesUrl.empty()) {
+        if (config.shop.type == "mock") {
+            auto demo = std::make_unique<MockRemoteSource>("{}", "");
+            demo->addDirectory("ftp://mock.local/Saves/");
+            return SavesSource{std::move(demo), "ftp://mock.local/Saves/"};
+        }
+        return SavesSource{std::make_unique<UnavailableRemoteSource>(
+                               makeError(ErrorCode::NotConfigured, "no saves_url in config.json"), "(not configured)"),
+                           ""};
+    }
+
+    auto unusable = [&config](const Error& error) {
+        return SavesSource{std::make_unique<UnavailableRemoteSource>(makeError(ErrorCode::NotConfigured, error.describe()),
+                                                                     config.savesUrl),
+                           config.savesUrl};
+    };
+    auto parts = url::split(config.savesUrl);
+    if (!parts) return unusable(parts.error());
+    if (parts.value().scheme != "ftp" && parts.value().scheme != "ftps") {
+        return unusable(makeError(ErrorCode::Unsupported, "saves_url must be ftp:// or ftps://"));
+    }
+
+    FtpConfig ftp;
+    ftp.host = parts.value().host;
+    ftp.port = parts.value().port.value_or(21);
+    ftp.useTls = parts.value().scheme == "ftps";
+    ftp.verifyPeer = config.shop.verifyTls;
+
+    const std::string& userInfo = parts.value().userInfo;
+    if (!userInfo.empty()) {
+        std::size_t colon = userInfo.find(':');
+        ftp.username = url::percentDecode(userInfo.substr(0, colon));
+        ftp.password = colon == std::string::npos ? "" : url::percentDecode(userInfo.substr(colon + 1));
+    } else if (auto shop = ftpConfigFromShop(config.shop); shop && shop.value().host == ftp.host && shop.value().port == ftp.port) {
+        ftp.username = shop.value().username;
+        ftp.password = shop.value().password;
+    }  // else: anonymous
+
+    if (Status valid = FtpClient::validate(ftp); !valid) return unusable(valid.error());
+
+    // Canonical folder URL without credentials (they travel as curl options).
+    std::string base = parts.value().scheme + "://" + (ftp.host.find(':') != std::string::npos ? "[" + ftp.host + "]" : ftp.host) +
+                       ":" + std::to_string(ftp.port) + parts.value().path;
+    if (base.back() != '/') base += '/';
+    return SavesSource{std::make_unique<FtpClient>(std::move(ftp)), base};
+}
+
 }  // namespace rm

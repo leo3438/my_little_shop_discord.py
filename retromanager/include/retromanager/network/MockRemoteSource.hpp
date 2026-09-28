@@ -2,6 +2,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <ctime>
+#include <functional>
+#include <set>
+#include <vector>
 #include <map>
 #include <memory>
 #include <optional>
@@ -40,6 +44,18 @@ class MockRemoteSource : public IRemoteSource {
     Result<std::string> fetchIndex() override;
     Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                         const CancellationToken& cancel) override;
+    Result<std::vector<RemoteEntry>> listDirectory(const std::string& url) override;
+    Status uploadFile(const std::string& url, const ChunkReader& reader, std::uint64_t size,
+                      const ProgressCallback& progress, const CancellationToken& cancel) override;
+
+    // Makes an (empty) directory exist; directories holding files exist implicitly.
+    void addDirectory(const std::string& url);
+    // Content of a real (non-synthetic) file, nullopt when absent.
+    std::optional<std::string> fileContent(const std::string& url) const;
+    // Clock stamping uploads and added files (default: the real time).
+    void setClock(std::function<std::int64_t()> clock) { clock_ = std::move(clock); }
+    void setFileTime(const std::string& url, std::int64_t modifiedAt);
+    int uploadCount() const { return uploadCount_.load(); }
 
     void addFile(const std::string& url, std::string content);
     void addSyntheticFile(const std::string& url, std::uint64_t size);
@@ -66,11 +82,18 @@ class MockRemoteSource : public IRemoteSource {
         std::string content;      // real content, or...
         std::uint64_t size = 0;   // ...synthetic size when `synthetic`
         bool synthetic = false;
+        std::int64_t modifiedAt = 0;
     };
+
+    // "%28" and "(" designate the same file, as on a real server.
+    static std::string canonical(const std::string& url);
+    void registerParents(const std::string& canonicalUrl);
 
     std::string document_;
     std::string indexUrl_;
-    std::map<std::string, File> files_;
+    std::map<std::string, File> files_;       // canonical URL -> file
+    std::set<std::string> directories_;       // canonical URLs ending with '/'
+    std::function<std::int64_t()> clock_ = [] { return static_cast<std::int64_t>(std::time(nullptr)); };
     std::chrono::milliseconds latency_{0};
     std::optional<Error> failure_;
     std::optional<std::uint64_t> dropAfter_;
@@ -79,6 +102,7 @@ class MockRemoteSource : public IRemoteSource {
     std::size_t chunkSize_ = 16 * 1024;  // like curl's default write chunk
     std::atomic<int> fetchCount_{0};
     std::atomic<int> downloadCount_{0};
+    std::atomic<int> uploadCount_{0};
 };
 
 }  // namespace rm

@@ -21,6 +21,10 @@ struct FtpConfig {
     long transferTimeoutSeconds = 60;   // whole-transfer limit for the (small) index only
     long stallTimeoutSeconds = 30;      // downloads: abort when no byte arrives for this long
     std::size_t maxIndexBytes = 16 * 1024 * 1024;  // protects the console's RAM
+    // MLSD gives exact sizes and UTC times in one listing. Servers without
+    // it (vsftpd) fall back to NLST + SIZE/MDTM automatically; setting this
+    // to false forces the fallback (tests).
+    bool useMlsd = true;
 };
 
 // IRemoteSource over FTP/FTPS, backed by libcurl (available on both desktop
@@ -43,6 +47,16 @@ class FtpClient : public IRemoteSource {
     Result<std::string> fetchIndex() override;
     Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                         const CancellationToken& cancel) override;
+    Result<std::vector<RemoteEntry>> listDirectory(const std::string& url) override;
+    // Uploads to a hidden ".<name>.tmp" next to the target, then renames it
+    // (RNFR/RNTO) once complete.
+    Status uploadFile(const std::string& url, const ChunkReader& reader, std::uint64_t size,
+                      const ProgressCallback& progress, const CancellationToken& cancel) override;
+
+    // RFC 3659 MLSD output -> entries ("." and ".." and non file/dir types dropped).
+    static std::vector<RemoteEntry> parseMlsd(std::string_view listing);
+    // "YYYYMMDDHHMMSS[.sss]" (UTC) -> Unix seconds.
+    static std::optional<std::int64_t> parseMlsdTime(std::string_view value);
 
     // Server path of `url` when it designates the configured server (same
     // host and port, ftp:// or ftps://), decoded. PermissionDenied otherwise.
@@ -60,6 +74,9 @@ class FtpClient : public IRemoteSource {
     static constexpr long kReceiveBufferBytes = 256 * 1024;
 
   private:
+    Result<std::vector<RemoteEntry>> listWithMlsd(const std::string& directory) const;
+    Result<std::vector<RemoteEntry>> listWithNlst(const std::string& directory) const;
+
     FtpConfig config_;
 };
 

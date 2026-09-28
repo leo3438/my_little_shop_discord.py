@@ -20,6 +20,12 @@
       "size": 13,
       "url": "roms/nds/Test%20DS%20Game%20(Europe).nds",
       "cheat_url": "cheats/nds/Test%20DS%20Game%20(Europe).cht"
+    },
+    {
+      "title": "Test N64 Game",
+      "region": "EUR",
+      "size": 12,
+      "url": "roms/n64/Test%20N64%20Game%20(Europe).z64"
     }
   ]
 }

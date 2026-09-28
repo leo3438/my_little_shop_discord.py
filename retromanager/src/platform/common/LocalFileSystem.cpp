@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <string>
+#include <sys/stat.h>
 #include <system_error>
 
 #include "retromanager/platform/VirtualPath.hpp"
@@ -26,6 +27,14 @@ Error fromErrorCode(const std::error_code& ec, const std::string& context) {
              ec == std::errc::read_only_file_system)
         code = ErrorCode::PermissionDenied;
     return makeError(code, context + ": " + ec.message());
+}
+
+// POSIX stat(): portable to newlib (Switch) and gives Unix seconds directly,
+// unlike std::filesystem::last_write_time whose clock epoch is unspecified in C++17.
+std::int64_t hostModificationTime(const fs::path& path) {
+    struct stat info {};
+    if (::stat(path.string().c_str(), &info) != 0) return 0;
+    return static_cast<std::int64_t>(info.st_mtime);
 }
 
 // Replaces `target` with `source`. FAT-formatted SD cards refuse to rename
@@ -133,11 +142,11 @@ Result<FileInfo> LocalFileSystem::stat(std::string_view rawPath) {
         if (ec == std::errc::not_a_directory) return makeError(ErrorCode::NotFound, path.value());
         return fromErrorCode(ec, path.value());
     }
-    if (fs::is_directory(status)) return FileInfo{EntryType::Directory, 0};
+    if (fs::is_directory(status)) return FileInfo{EntryType::Directory, 0, hostModificationTime(host)};
     if (fs::is_regular_file(status)) {
         std::uintmax_t size = fs::file_size(host, ec);
         if (ec) return fromErrorCode(ec, path.value());
-        return FileInfo{EntryType::File, static_cast<std::uint64_t>(size)};
+        return FileInfo{EntryType::File, static_cast<std::uint64_t>(size), hostModificationTime(host)};
     }
     return makeError(ErrorCode::Unsupported, "not a regular file or directory: " + path.value());
 }
@@ -160,10 +169,11 @@ Result<std::vector<DirEntry>> LocalFileSystem::listDirectory(std::string_view ra
         fs::file_status status = it->status(entryEc);
         if (entryEc) continue;  // vanished or unreadable entry
         if (fs::is_directory(status)) {
-            entries.push_back(DirEntry{std::move(name), EntryType::Directory, 0});
+            entries.push_back(DirEntry{std::move(name), EntryType::Directory, 0, hostModificationTime(it->path())});
         } else if (fs::is_regular_file(status)) {
             std::uintmax_t size = it->file_size(entryEc);
-            entries.push_back(DirEntry{std::move(name), EntryType::File, entryEc ? 0 : size});
+            entries.push_back(
+                DirEntry{std::move(name), EntryType::File, entryEc ? 0 : size, hostModificationTime(it->path())});
         }
     }
     if (ec) return fromErrorCode(ec, path.value());

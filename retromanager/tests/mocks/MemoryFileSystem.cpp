@@ -58,7 +58,16 @@ class MemoryWriteStream : public IWriteStream {
     bool closed_ = false;
 };
 
-MemoryFileSystem::MemoryFileSystem() { nodes_.emplace("/", Node{EntryType::Directory, nullptr}); }
+MemoryFileSystem::MemoryFileSystem() { nodes_.emplace("/", Node{EntryType::Directory, nullptr, clock_()}); }
+
+Status MemoryFileSystem::setModificationTime(std::string_view rawPath, std::int64_t modifiedAt) {
+    auto path = vpath::normalize(rawPath);
+    if (!path) return path.error();
+    auto it = nodes_.find(path.value());
+    if (it == nodes_.end()) return makeError(ErrorCode::NotFound, path.value());
+    it->second.modifiedAt = modifiedAt;
+    return success();
+}
 
 Status MemoryFileSystem::checkWritable() const {
     if (readOnly_) return makeError(ErrorCode::PermissionDenied, "filesystem is read-only");
@@ -106,7 +115,7 @@ Result<FileInfo> MemoryFileSystem::stat(std::string_view rawPath) {
     auto it = nodes_.find(path.value());
     if (it == nodes_.end()) return makeError(ErrorCode::NotFound, path.value());
     std::uint64_t size = it->second.type == EntryType::File ? it->second.data->size() : 0;
-    return FileInfo{it->second.type, size};
+    return FileInfo{it->second.type, size, it->second.modifiedAt};
 }
 
 Result<std::vector<DirEntry>> MemoryFileSystem::listDirectory(std::string_view rawPath) {
@@ -124,7 +133,7 @@ Result<std::vector<DirEntry>> MemoryFileSystem::listDirectory(std::string_view r
         std::string name = it->first.substr(prefix.size());
         if (name.find('/') != std::string::npos) continue;  // grand-child
         std::uint64_t size = it->second.type == EntryType::File ? it->second.data->size() : 0;
-        entries.push_back(DirEntry{std::move(name), it->second.type, size});
+        entries.push_back(DirEntry{std::move(name), it->second.type, size, it->second.modifiedAt});
     }
     std::sort(entries.begin(), entries.end(),
               [](const DirEntry& a, const DirEntry& b) { return a.name < b.name; });
@@ -147,7 +156,7 @@ Status MemoryFileSystem::createDirectories(std::string_view rawPath) {
     if (missing.empty()) return success();
 
     if (Status writable = checkWritable(); !writable) return writable;
-    for (const std::string& dir : missing) nodes_.emplace(dir, Node{EntryType::Directory, nullptr});
+    for (const std::string& dir : missing) nodes_.emplace(dir, Node{EntryType::Directory, nullptr, clock_()});
     return success();
 }
 
@@ -183,7 +192,7 @@ Status MemoryFileSystem::commit(const std::string& path, std::string data) {
     if (it != nodes_.end() && it->second.type == EntryType::Directory) {
         return makeError(ErrorCode::IsADirectory, path);
     }
-    nodes_[path] = Node{EntryType::File, std::make_shared<const std::string>(std::move(data))};
+    nodes_[path] = Node{EntryType::File, std::make_shared<const std::string>(std::move(data)), clock_()};
     return success();
 }
 

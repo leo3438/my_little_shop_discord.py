@@ -49,6 +49,7 @@ add_library(retromanager_core STATIC
     src/network/MockRemoteSource.cpp
     src/parsers/CfgDocument.cpp
     src/parsers/ConfigParser.cpp
+    src/parsers/IniDocument.cpp
     src/parsers/RepoIndexParser.cpp
     src/platform/common/BufferedWriteStream.cpp
     src/platform/common/IFileSystem.cpp
@@ -56,10 +57,13 @@ add_library(retromanager_core STATIC
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
     src/services/CheatManager.cpp
+    src/services/CloudSyncService.cpp
     src/services/ConfigManager.cpp
     src/services/DownloadService.cpp
     src/services/EmulatorConfigurator.cpp
+    src/services/SysClkConfigurator.cpp
     src/services/ShopService.cpp
+    src/services/SyncPlanner.cpp
 )
 target_include_directories(retromanager_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 find_package(Threads REQUIRED)
@@ -102,6 +106,7 @@ if (RM_BUILD_APP)
         src/ui/DownloadActivity.cpp
         src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp
+        src/ui/SyncActivity.cpp
         ${RM_PLATFORM_SRC}
     )
     if (PLATFORM_SWITCH)

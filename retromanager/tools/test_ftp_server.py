@@ -2,7 +2,8 @@
 """Local FTP server for the FtpClient integration tests (requires pyftpdlib).
 
 Serves a temporary copy of tests/fixtures/ftp_root, read-only, with user
-"retro" / password "manager", on 127.0.0.1. On top of the fixture it
+"retro" / password "manager", on 127.0.0.1, plus a writable /saves folder
+for the cloud-saves tests. On top of the fixture it
 generates a large deterministic ROM ("Big Test ROM", --big-mb MiB) and adds
 it, with its size and CRC32, to shop/index.json: this is what the streaming
 and memory tests download.
@@ -72,7 +73,11 @@ def build_root(big_mb: int) -> Path:
 
 def make_handler(root: Path, tls: bool, throttle_kbps: int = 0):
     authorizer = DummyAuthorizer()
-    authorizer.add_user(USER, PASSWORD, str(root), perm="elr")  # read-only
+    authorizer.add_user(USER, PASSWORD, str(root), perm="elr")  # the shop is read-only...
+    saves = root / "saves"
+    saves.mkdir(exist_ok=True)
+    # ...but the cloud-saves area accepts uploads, renames and new folders.
+    authorizer.override_perm(USER, str(saves), perm="elradfmwMT", recursive=True)
     if tls:
         from pyftpdlib.handlers import TLS_FTPHandler
 

@@ -10,8 +10,10 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 4 - RetroArch & triches",
-        "shop": "Boutique : {}"
+        "version": "v{} - Phase 5 - Sauvegardes cloud & sys-clk",
+        "shop": "Boutique : {}",
+        "saves": "Sauvegardes cloud : {}",
+        "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
     },
     "shop": {
         "title": "Boutique",
@@ -50,6 +52,30 @@
         "step_cheats_ok": "Codes de triche installés (menu RetroArch > Codes de triche > Charger).",
         "step_cheats_missing": "Codes de triche ignorés : RetroArch absent ou fichier de triche introuvable.",
         "step_cheats_failed": "Impossible d'installer les codes de triche ({}).",
-        "please_wait": "Patientez..."
+        "please_wait": "Patientez...",
+        "step_sysclk_ok": "sys-clk : CPU à 1785 MHz pour RetroArch.",
+        "step_sysclk_missing": "sys-clk n'est pas installé : fréquences inchangées.",
+        "step_sysclk_failed": "Impossible de configurer sys-clk ({})."
+    },
+    "sync": {
+        "title": "Sauvegardes cloud",
+        "open": "Synchroniser les sauvegardes",
+        "heading": "Synchronisation des sauvegardes",
+        "scanning": "Comparaison des sauvegardes de la carte SD et du NAS...",
+        "action_upload": "Envoi",
+        "action_download": "Réception",
+        "action_conflict": "Conflit (les deux versions sont gardées)",
+        "action_in_sync": "À jour",
+        "cancelling": "Annulation après le fichier en cours...",
+        "cancelled": "Synchronisation annulée",
+        "already_running": "Une synchronisation est encore en cours d'arrêt : réessayez dans un instant.",
+        "done": "Synchronisation terminée : {} envoyées, {} reçues",
+        "unchanged": "{} déjà à jour",
+        "conflicts": "{} conflit(s) : la version la plus récente est en place, l'autre est gardée à côté :",
+        "failures": "{} fichier(s) en échec :",
+        "error_not_configured": "Sauvegardes cloud non configurées : ajoutez \"saves_url\" (ex. ftp://nas/Saves/) dans /switch/RetroManager/config.json.",
+        "error_network": "Impossible de joindre le NAS des sauvegardes. Vérifiez le réseau.",
+        "error_denied": "Accès refusé (dossier du NAS en lecture seule, ou carte SD protégée).",
+        "error_generic": "La synchronisation a échoué."
     }
 }

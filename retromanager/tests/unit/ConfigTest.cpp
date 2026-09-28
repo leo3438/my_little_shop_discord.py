@@ -16,6 +16,9 @@ AppConfig sample() {
     config.shop.username = "leo";
     config.shop.password = "p\"ss\\wörd";
     config.shop.verifyTls = true;
+    config.savesUrl = "ftp://nas.local:2121/Saves/";
+    config.sysclk.enabled = false;
+    config.sysclk.titleId = "010000000000100D";
     return config;
 }
 
@@ -50,6 +53,22 @@ TEST(ConfigParser, MissingFieldsTakeDefaults) {
     auto empty = parseConfig("{}");
     ASSERT_TRUE(empty.ok());
     EXPECT_EQ(empty.value(), AppConfig{});
+}
+
+TEST(ConfigParser, ReadsSavesAndSysClkSettings) {
+    auto parsed = parseConfig(R"({"saves_url": "ftp://nas/Saves/", "sysclk": {"title_id": "0100000000001000"}})");
+    ASSERT_TRUE(parsed.ok()) << parsed.error().describe();
+    EXPECT_EQ(parsed.value().savesUrl, "ftp://nas/Saves/");
+    EXPECT_TRUE(parsed.value().sysclk.enabled);
+    EXPECT_EQ(parsed.value().sysclk.titleId, "0100000000001000");
+
+    AppConfig defaults;
+    EXPECT_EQ(defaults.sysclk.titleId, "05B9D58000000000");
+    EXPECT_TRUE(defaults.savesUrl.empty());
+
+    EXPECT_EQ(parseConfig(R"({"saves_url": 3})").error().code, ErrorCode::ParseError);
+    EXPECT_EQ(parseConfig(R"({"sysclk": {"title_id": "05B9"}})").error().code, ErrorCode::ParseError);
+    EXPECT_EQ(parseConfig(R"({"sysclk": {"enabled": "yes"}})").error().code, ErrorCode::ParseError);
 }
 
 TEST(ConfigParser, IgnoresUnknownFields) {
@@ -173,6 +192,41 @@ TEST(SourceFactory, BuildsTheConfiguredSource) {
     mock.type = "mock";
     auto demo = createRemoteSource(mock);
     EXPECT_TRUE(demo->fetchIndex().ok());
+}
+
+TEST(SourceFactory, SavesUseTheShopCredentialsOnlyOnTheSameServer) {
+    AppConfig config = sample();  // shop on nas.local:2121, user leo
+    config.savesUrl = "ftp://nas.local:2121/Saves";
+    SavesSource same = createSavesSource(config);
+    EXPECT_EQ(same.baseUrl, "ftp://nas.local:2121/Saves/");
+    EXPECT_EQ(same.source->describe(), "ftp://leo@nas.local:2121/index.json");
+
+    config.savesUrl = "ftp://backup.local/Saves/";  // another machine
+    SavesSource other = createSavesSource(config);
+    EXPECT_EQ(other.source->describe().find("leo"), std::string::npos);  // anonymous, password not sent
+    EXPECT_EQ(other.baseUrl, "ftp://backup.local:21/Saves/");
+
+    config.savesUrl = "ftp://saver:pw@backup.local/Saves/";  // explicit credentials win
+    EXPECT_EQ(createSavesSource(config).source->describe(), "ftp://saver@backup.local:21/index.json");
+    EXPECT_EQ(createSavesSource(config).baseUrl, "ftp://backup.local:21/Saves/");  // no password in the URL
+}
+
+TEST(SourceFactory, SavesSourceErrors) {
+    AppConfig config = sample();
+    config.savesUrl.clear();
+    SavesSource none = createSavesSource(config);
+    EXPECT_TRUE(none.baseUrl.empty());
+
+    config.savesUrl = "https://nas/Saves/";
+    SavesSource bad = createSavesSource(config);
+    CancellationToken cancel;
+    EXPECT_EQ(bad.source->listDirectory(bad.baseUrl).error().code, ErrorCode::NotConfigured);
+
+    AppConfig demo;
+    demo.shop.type = "mock";
+    SavesSource mock = createSavesSource(demo);
+    EXPECT_FALSE(mock.baseUrl.empty());
+    EXPECT_TRUE(mock.source->listDirectory(mock.baseUrl).ok());
 }
 
 TEST(SourceFactory, UnconfiguredSourceReportsWhyEverywhere) {
