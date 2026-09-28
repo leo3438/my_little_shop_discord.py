@@ -18,7 +18,9 @@ project(RetroManager VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Keep GNU extensions (gnu++17): with strict -std=c++17 newlib hides POSIX
+# functions (fileno, fdopen) that Borealis' bundled fmt needs on Switch.
+set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (PLATFORM_SWITCH AND RM_BUILD_TESTS)
