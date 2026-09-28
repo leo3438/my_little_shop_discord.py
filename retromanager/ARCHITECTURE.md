@@ -222,8 +222,10 @@ défait jamais l'installation : son erreur est rapportée à côté.
 | Étape | Effet |
 |---|---|
 | `EmulatorConfigurator` | `rgui_browser_directory` de `retroarch.cfg` pointe sur le dossier de la ROM (`/roms/nds/`). Édition via `CfgDocument` : seule la valeur change, tout le reste du fichier est conservé octet pour octet. Copie `retroarch.cfg.rmbak` avant la première modification ; fichier créé s'il n'existe pas ; rien si RetroArch n'est pas installé. |
+| `PlaylistManager` | Ajoute le jeu à `<playlist_directory>/<système libretro>.lpl` (JSON RetroArch ; l'ancien format à 6 lignes est lu puis converti) : chemin, libellé = nom de la ROM sans extension, cœur `DETECT`, CRC-32 **mesuré pendant le téléchargement** (`DownloadService` le transmet aux étapes). `PlaylistDocument` conserve tout ce que RetroArch a écrit (champs inconnus, ordre des clés, autres entrées) ; une entrée existante pour le même fichier est mise à jour, jamais dupliquée ; copie `.lpl.rmbak` ; playlist illisible = laissée intacte (`ParseError`). |
+| `ThumbnailManager` | Si l'entrée a une jaquette (`boxart` / `url_boxart`) : PNG vérifié (signature), 8 Mio max, écrit dans `<thumbnails_directory>/<système libretro>/Named_Boxarts/<libellé>.png` avec la règle de nommage de RetroArch (`&` `*` `/` `:` `<` `>` `?` `\` `\|` et l'accent grave deviennent `_`). |
 | `CheatManager` | Si l'entrée a un `cheat_url` : télécharge le `.cht` (1 Mio max, validé comme fichier de triche RetroArch) dans `<cheat_database_path>/<système libretro>/<nom de la ROM>.cht`. |
-| `SysClkConfigurator` | Pour un jeu N64, PlayStation ou 3DS : section `[<title id>]` de `/config/sys-clk/config.ini` avec `handheld_cpu=1785` et `docked_cpu=1785`. Édition via `IniDocument` (sections, commentaires `;`/`#`, sans perte), copie `config.ini.rmbak`, idempotent ; `NotFound` si sys-clk n'est pas installé (`/config/sys-clk` absent). Title id configurable (`sysclk.title_id`, défaut `05B9D58000000000`), étape désactivable (`sysclk.enabled`). |
+| `SysClkConfigurator` | Pour un jeu N64 ou PlayStation (pas la 3DS, qui tourne dans Citra autonome) : section `[<title id>]` de `/config/sys-clk/config.ini` avec `handheld_cpu=1785` et `docked_cpu=1785`. Édition via `IniDocument` (sections, commentaires `;`/`#`, sans perte), copie `config.ini.rmbak`, idempotent ; `NotFound` si sys-clk n'est pas installé (`/config/sys-clk` absent). Title id configurable (`sysclk.title_id`, défaut `010000000000100D`, l'applet Album dans lequel tourne un `.nro` lancé depuis hbmenu), étape désactivable (`sysclk.enabled`). |
 
 La mémoire consommée ne dépend pas de la taille de la ROM : tampon
 d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
@@ -289,13 +291,38 @@ annulation, dossier absent, repli NLST, identifiants), `CloudSyncOverFtp` :
 croisés sans ping-pong, puis jeu simultané des deux côtés → les deux versions
 sont gardées.
 
-### 4.5 Asynchronisme
+### 4.5 Flux implémenté (Phase 6) : BIOS
+
+`BiosManager` (services, son propre `WorkerThread`) croise trois sources :
+le catalogue (`models/Bios.cpp` : fichier, système, MD5 de référence,
+requis ou non), le dossier système de RetroArch (`system_directory`,
+`/retroarch/system` par défaut ; recherche insensible à la casse comme FAT)
+et la section `bios` de l'index de la boutique.
+
+- `check(offres)` : une ligne par fichier du catalogue, plus les fichiers
+  proposés hors catalogue, triées par système. État : manquant, présent et
+  vérifié (MD5), présent mais « version non reconnue », présent sans
+  référence (`firmware.bin`, propre à chaque console).
+- `installNow(offre)` : téléchargement en flux vers un fichier caché
+  (`openWrite`), MD5 calculé au fil de l'eau ; si la boutique annonce un MD5
+  différent, rien n'est installé (`IntegrityError`). Sans MD5 de la
+  boutique, le fichier est installé et `check()` dit s'il est reconnu : le
+  catalogue n'est qu'une référence (autres régions, révisions).
+- `startInstall(offres)` : en arrière-plan, `BiosInstalled` par fichier (un
+  échec n'arrête pas les autres) puis `BiosInstallFinished`.
+
+`BiosActivity` : chargement de l'index (asynchrone), puis la liste par
+système, A sur une ligne pour télécharger, X pour tout télécharger. Si le
+serveur est injoignable, l'état de la carte SD s'affiche quand même.
+
+### 4.6 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
     courtes (chargement de l'index) ;
   - `WorkerThread`, un thread dédié possédé par `DownloadService` (et un
-    autre par `CloudSyncService`), pour les téléchargements et la synchro :
+    autre par `CloudSyncService` et par `BiosManager`), pour les
+    téléchargements et la synchro :
     ils durent des minutes et ne doivent pas bloquer la
     boucle de tâches unique de Borealis ;
   - `ImmediateTaskRunner` ou une file manuelle dans les tests, qui restent
@@ -313,11 +340,11 @@ sont gardées.
   cloud). `publish()` depuis n'importe quel thread ; les handlers tournent
   toujours sur le thread principal ; une `Subscription` détruite n'est plus
   jamais appelée, même pour un événement déjà en file.
-- `DownloadService` et `CloudSyncService` possèdent leur `WorkerThread` :
+- `DownloadService`, `CloudSyncService` et `BiosManager` possèdent leur `WorkerThread` :
   leur destructeur annule tout et attend la fin du transfert en cours. Dans
   `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.6 Gestion des erreurs
+### 4.7 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -376,4 +403,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 3 | `config.json` + vrai `FtpClient`, téléchargement en flux, `RomStore` (espace, CRC, atomique), `EventBus`, écran de progression annulable, FTPS sans vérification | ✅ |
 | 4 | Anti-veille (`ISystem`), `CfgDocument`, `EmulatorConfigurator`, `CheatManager` (`cheat_url`), étapes post-installation, tag « Installé » | ✅ |
 | 5 | Envoi FTP en flux + listing (MLSD / NLST), `CloudSyncService` (manifeste, conflits sans perte), `IniDocument`, `SysClkConfigurator`, écran « Synchroniser les sauvegardes » | ✅ |
-| 6+ | File de téléchargements, sources HTTP/SMB, scraping, BIOS, forwarders | — |
+| 6 | Playlists RetroArch (`PlaylistDocument`, `PlaylistManager`), jaquettes (`ThumbnailManager`), BIOS (catalogue, MD5, section `bios` de l'index, `BiosManager`, écran « Vérification des BIOS »), sys-clk sur l'applet Album | ✅ |
+| 7+ | File de téléchargements, sources HTTP/SMB, scraping automatique (bases libretro), forwarders | — |

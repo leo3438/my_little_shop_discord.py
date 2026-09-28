@@ -18,7 +18,7 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
   "saves_url": "ftp://192.168.1.20:21/Saves/",
   "sysclk": {
     "enabled": true,
-    "title_id": "05B9D58000000000"
+    "title_id": "010000000000100D"
   }
 }
 ```
@@ -30,8 +30,8 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 | `shop.username` / `shop.password` | `""` | Identifiants. Vides : `anonymous`, ou ceux inclus dans l'URL (`ftp://user:pass@hote/`). |
 | `shop.verifyTls` | `false` | Vérification du certificat en FTPS. Voir ci-dessous. Vaut aussi pour `saves_url`. |
 | `saves_url` | `""` | Dossier du NAS pour les sauvegardes cloud (`ftp://` ou `ftps://`). Vide : bouton « Synchroniser les sauvegardes » inactif (message explicatif). Identifiants : ceux de l'URL (`ftp://user:pass@nas/Saves/`), sinon ceux de la boutique **si et seulement si** même hôte et même port, sinon `anonymous`. Le compte doit pouvoir **écrire** dans ce dossier (envoi, renommage, création de sous-dossiers). |
-| `sysclk.enabled` | `true` | Après l'installation d'un jeu N64 / PlayStation / 3DS, règle sys-clk sur 1785 MHz (CPU, portable et dock) pour RetroArch. |
-| `sysclk.title_id` | `"05B9D58000000000"` | Section de `/config/sys-clk/config.ini` à modifier : 16 chiffres hexadécimaux, sinon la configuration est refusée. Voir ci-dessous. |
+| `sysclk.enabled` | `true` | Après l'installation d'un jeu N64 / PlayStation, règle sys-clk sur 1785 MHz (CPU, portable et dock) pour RetroArch. La 3DS n'est pas concernée : elle tourne dans Citra (autonome), pas dans RetroArch. |
+| `sysclk.title_id` | `"010000000000100D"` | Section de `/config/sys-clk/config.ini` à modifier : 16 chiffres hexadécimaux, sinon la configuration est refusée. Voir ci-dessous. |
 
 ## Comportement
 
@@ -65,12 +65,12 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 sys-clk applique un profil selon le **title id du programme au premier
 plan**. Il dépend de la façon dont RetroArch est lancé :
 
-- `05B9D58000000000` (défaut) : l'identifiant attribué à RetroArch lancé
-  comme titre (forwarder installé, etc.). **Non vérifié sur console** :
-  contrôlez celui qu'affiche l'overlay de sys-clk pendant un jeu.
-- `010000000000100D` : l'applet Album, c'est-à-dire tout homebrew `.nro`
-  lancé depuis le menu hbmenu par l'Album (le profil s'applique alors à
-  tous les homebrews ainsi lancés).
+- `010000000000100D` (défaut) : l'applet Album. RetroArch est un `.nro`
+  lancé depuis hbmenu, qui tourne dans l'Album : c'est le cas courant. Le
+  profil s'applique alors à tous les homebrews lancés de cette façon.
+- Un autre identifiant si RetroArch est lancé autrement (forwarder installé,
+  jeu détourné en mode application) : relevez celui qu'affiche l'overlay de
+  sys-clk pendant un jeu et mettez-le dans `title_id`.
 
 Le fichier n'est modifié que si sys-clk est installé (`/config/sys-clk`
 présent) ; une copie `config.ini.rmbak` est faite avant la première

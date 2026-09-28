@@ -6,12 +6,18 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Boutique (build desktop)](docs/shop-desktop.png)
 ![Téléchargement (build desktop)](docs/download-desktop.png)
 ![Synchronisation des sauvegardes (build desktop)](docs/sync-desktop.png)
+![Vérification des BIOS (build desktop)](docs/bios-desktop.png)
 
-Après chaque téléchargement, RetroManager règle le navigateur de fichiers de
-RetroArch sur le dossier du jeu (édition de `retroarch.cfg` qui préserve le
-reste du fichier) et installe ses codes de triche si la boutique en fournit.
-Pour les jeux N64 / PlayStation, il règle aussi sys-clk (CPU à 1785 MHz pour
-RetroArch).
+Après chaque téléchargement, RetroManager intègre le jeu à RetroArch : il
+l'ajoute à la playlist de son système (il apparaît directement dans le menu
+principal), installe sa jaquette et ses codes de triche si la boutique en
+fournit, et règle le navigateur de fichiers sur son dossier (éditions qui
+préservent le reste des fichiers). Pour les jeux N64 / PlayStation, il règle
+aussi sys-clk (CPU à 1785 MHz pour RetroArch).
+
+L'écran « Vérification des BIOS » liste les BIOS attendus par les cœurs
+(GBA, PlayStation, DS…), vérifie leur MD5 et télécharge ceux qui manquent
+depuis la boutique.
 
 Le bouton « Synchroniser les sauvegardes » échange les `.srm` / `.sav` de
 RetroArch avec un dossier du NAS (`saves_url`), dans les deux sens, sans
@@ -50,6 +56,7 @@ python3 tools/test_ftp_server.py --port 2121 --throttle-kbps 8192 &
 cmake --preset desktop && cmake --build --preset desktop
 ./build/desktop/RetroManager           # -d : logs debug, -v : vue de debug
 
+# Sur desktop : Entrée = A, Échap = B, clic milieu = X
 # Interface en français (sur Switch : langue de la console)
 RETROMANAGER_LANG=fr ./build/desktop/RetroManager
 
