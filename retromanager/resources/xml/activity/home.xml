@@ -1,0 +1,33 @@
+<brls:AppletFrame>
+    <brls:Box
+        title="@i18n/retromanager/app/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        justifyContent="center"
+        grow="1.0">
+
+        <brls:Label
+            text="@i18n/retromanager/home/welcome"
+            fontSize="36"
+            horizontalAlign="center"
+            marginBottom="20" />
+
+        <brls:Label
+            text="@i18n/retromanager/home/subtitle"
+            horizontalAlign="center"
+            marginBottom="60" />
+
+        <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
+        <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />
+        <brls:Label id="home/retroarch" horizontalAlign="center" />
+
+        <brls:Label
+            id="home/version"
+            fontSize="16"
+            horizontalAlign="center"
+            marginTop="60" />
+    </brls:Box>
+</brls:AppletFrame>

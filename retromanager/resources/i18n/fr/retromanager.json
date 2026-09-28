@@ -1,0 +1,15 @@
+{
+    "app": {
+        "title": "RetroManager"
+    },
+    "home": {
+        "welcome": "Bienvenue dans RetroManager",
+        "subtitle": "Le gestionnaire d'émulation rétro pour Nintendo Switch",
+        "platform": "Plateforme : {}",
+        "sd_root": "Carte SD : {}",
+        "retroarch_found": "RetroArch : installé",
+        "retroarch_missing": "RetroArch : introuvable sur la carte SD",
+        "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
+        "version": "v{} - Squelette Phase 1"
+    }
+}
