@@ -64,6 +64,74 @@ std::string normalizePathAndQuery(std::string_view pathAndQuery) {
 
 }  // namespace
 
+Result<UrlParts> split(std::string_view url) {
+    auto invalid = [&url](const std::string& why) {
+        return makeError(ErrorCode::InvalidArgument, why + ": \"" + std::string(url) + "\"");
+    };
+    if (!hasScheme(url)) return invalid("URL has no scheme");
+    std::size_t colon = url.find(':');
+    if (url.substr(colon + 1, 2) != "//") return invalid("URL has no \"//host\" part");
+
+    UrlParts parts;
+    for (char c : url.substr(0, colon)) parts.scheme += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    std::string_view rest = url.substr(colon + 3);
+    std::size_t authorityEnd = rest.find_first_of("/?#");
+    std::string_view authority = rest.substr(0, authorityEnd);
+    rest = authorityEnd == std::string_view::npos ? std::string_view() : rest.substr(authorityEnd);
+
+    if (std::size_t at = authority.rfind('@'); at != std::string_view::npos) {
+        parts.userInfo = std::string(authority.substr(0, at));
+        authority = authority.substr(at + 1);
+    }
+
+    std::string_view portText;
+    if (!authority.empty() && authority.front() == '[') {
+        std::size_t close = authority.find(']');
+        if (close == std::string_view::npos) return invalid("unterminated IPv6 address");
+        parts.host = std::string(authority.substr(1, close - 1));
+        std::string_view after = authority.substr(close + 1);
+        if (!after.empty()) {
+            if (after.front() != ':') return invalid("garbage after IPv6 address");
+            portText = after.substr(1);
+            if (portText.empty()) return invalid("empty port");
+        }
+    } else {
+        std::size_t portColon = authority.rfind(':');
+        parts.host = std::string(authority.substr(0, portColon));
+        if (portColon != std::string_view::npos) {
+            portText = authority.substr(portColon + 1);
+            if (portText.empty()) return invalid("empty port");
+        }
+    }
+    if (parts.host.empty()) return invalid("URL has no host");
+    for (char& c : parts.host) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    if (!portText.empty()) {
+        if (portText.size() > 5) return invalid("invalid port");
+        unsigned long port = 0;
+        for (char c : portText) {
+            if (!std::isdigit(static_cast<unsigned char>(c))) return invalid("invalid port");
+            port = port * 10 + static_cast<unsigned long>(c - '0');
+        }
+        if (port == 0 || port > 65535) return invalid("port out of range");
+        parts.port = static_cast<std::uint16_t>(port);
+    }
+
+    std::size_t hash = rest.find('#');
+    if (hash != std::string_view::npos) {
+        parts.fragment = std::string(rest.substr(hash + 1));
+        rest = rest.substr(0, hash);
+    }
+    std::size_t question = rest.find('?');
+    if (question != std::string_view::npos) {
+        parts.query = std::string(rest.substr(question + 1));
+        rest = rest.substr(0, question);
+    }
+    parts.path = rest.empty() ? std::string("/") : std::string(rest);
+    return parts;
+}
+
 bool hasScheme(std::string_view url) {
     std::size_t colon = url.find(':');
     if (colon == std::string_view::npos || colon == 0) return false;

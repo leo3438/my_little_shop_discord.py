@@ -2,6 +2,19 @@
 
 namespace rm {
 
+std::string stagingPath(std::string_view path) {
+    std::size_t slash = path.rfind('/');
+    std::string_view dir = path.substr(0, slash + 1);
+    std::string_view name = path.substr(slash + 1);
+    return std::string(dir) + "." + std::string(name) + ".tmp";
+}
+
+bool isStagingName(std::string_view name) {
+    constexpr std::string_view suffix = ".tmp";
+    return name.size() > 1 + suffix.size() && name.front() == '.' &&
+           name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
 bool IFileSystem::exists(std::string_view path) { return stat(path).ok(); }
 
 bool IFileSystem::isFile(std::string_view path) {

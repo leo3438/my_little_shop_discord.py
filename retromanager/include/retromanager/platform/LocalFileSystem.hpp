@@ -16,10 +16,6 @@ namespace rm {
 // path can ever resolve outside of it.
 class LocalFileSystem : public IFileSystem {
   public:
-    // Suffix of the staging file used for atomic writes. Such files are
-    // hidden from directory listings.
-    static constexpr const char* kPartialSuffix = ".rm-partial";
-
     explicit LocalFileSystem(std::filesystem::path root);
 
     const std::filesystem::path& root() const { return root_; }
@@ -32,6 +28,7 @@ class LocalFileSystem : public IFileSystem {
     Status remove(std::string_view path) override;
     Status removeAll(std::string_view path) override;
     Status rename(std::string_view from, std::string_view to) override;
+    Result<std::uint64_t> availableSpace(std::string_view path) override;
 
   private:
     std::filesystem::path toHost(const std::string& normalizedPath) const;

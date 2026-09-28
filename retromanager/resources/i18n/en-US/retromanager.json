@@ -10,7 +10,8 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 2 - shop"
+        "version": "v{} - Phase 3 - downloads",
+        "shop": "Shop: {}"
     },
     "shop": {
         "title": "Shop",
@@ -22,6 +23,24 @@
         "error_auth": "The server rejected the user name or password.",
         "error_not_found": "The shop index was not found on the server.",
         "error_format": "The shop index is invalid or uses an unsupported format.",
-        "error_generic": "Cannot load the shop: {}"
+        "error_generic": "Cannot load the shop: {}",
+        "error_not_configured": "No shop configured yet: set the NAS URL in /switch/RetroManager/config.json.",
+        "hint_download": "Download"
+    },
+    "download": {
+        "title": "Download",
+        "waiting": "Waiting for the server...",
+        "running": "Downloading to the SD card...",
+        "cancel": "Cancel",
+        "cancelling": "Cancelling...",
+        "close": "Close",
+        "done": "Done: the game is on your SD card.",
+        "cancelled": "Download cancelled: {}",
+        "error_space": "Not enough space on the SD card: {} needed, {} free.",
+        "error_network": "The connection to the NAS was lost.",
+        "error_not_found": "This file no longer exists on the server.",
+        "error_integrity": "The downloaded file is corrupted (CRC mismatch). Nothing was installed.",
+        "error_denied": "Access denied (read-only SD card, or a file hosted on another server).",
+        "error_generic": "The download failed."
     }
 }

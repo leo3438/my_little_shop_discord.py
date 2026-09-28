@@ -98,7 +98,7 @@ TEST(ShopService, PropagatesTransportErrors) {
 }
 
 TEST(ShopService, PropagatesParseErrors) {
-    MockRemoteSource source("{not json");
+    MockRemoteSource source("{not json", "");
     ImmediateTaskRunner tasks;
     ShopService shop(source, tasks);
 

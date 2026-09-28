@@ -23,6 +23,10 @@ enum class ErrorCode {
     ParseError,            // malformed document (JSON, cfg...)
     NetworkError,          // unreachable host, timeout, protocol failure
     AuthenticationFailed,  // server rejected the credentials
+    Cancelled,             // stopped on user request
+    InsufficientSpace,     // not enough free space on the SD card
+    IntegrityError,        // downloaded data does not match its checksum
+    NotConfigured,         // a required setting is missing (config.json)
 };
 
 const char* toString(ErrorCode code);

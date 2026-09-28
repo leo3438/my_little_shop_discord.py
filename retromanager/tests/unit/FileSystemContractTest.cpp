@@ -345,6 +345,37 @@ TYPED_TEST(FileSystemContract, RenameErrors) {
     EXPECT_TRUE(this->fs.exists("/file"));
 }
 
+// --- free space ----------------------------------------------------------
+
+TYPED_TEST(FileSystemContract, AvailableSpaceOnExistingPaths) {
+    this->mkdirs("/roms");
+    this->write("/roms/a.sfc", "x");
+
+    auto root = this->fs.availableSpace("/");
+    ASSERT_TRUE(root.ok()) << root.error().describe();
+    EXPECT_GT(root.value(), 0u);
+    EXPECT_TRUE(this->fs.availableSpace("/roms").ok());
+    EXPECT_TRUE(this->fs.availableSpace("/roms/a.sfc").ok());
+}
+
+TYPED_TEST(FileSystemContract, AvailableSpaceErrors) {
+    EXPECT_EQ(this->fs.availableSpace("/missing").error().code, ErrorCode::NotFound);
+    EXPECT_EQ(this->fs.availableSpace("relative").error().code, ErrorCode::InvalidPath);
+}
+
+TYPED_TEST(FileSystemContract, StagingFilesNeverShowUpInListings) {
+    this->mkdirs("/roms/nds");
+    auto stream = this->fs.openWrite("/roms/nds/Game.nds");
+    ASSERT_TRUE(stream.ok());
+    ASSERT_TRUE(stream.value()->write("x", 1).ok());
+    EXPECT_TRUE(this->fs.listDirectory("/roms/nds").value().empty());
+    ASSERT_TRUE(stream.value()->close().ok());
+
+    auto entries = this->fs.listDirectory("/roms/nds").value();
+    ASSERT_EQ(entries.size(), 1u);
+    EXPECT_EQ(entries[0].name, "Game.nds");
+}
+
 // --- path validation -----------------------------------------------------
 
 TYPED_TEST(FileSystemContract, EveryOperationRejectsInvalidPaths) {

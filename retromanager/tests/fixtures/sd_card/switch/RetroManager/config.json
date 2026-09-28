@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "shop": {
+    "type": "ftp",
+    "url": "ftp://127.0.0.1:2121/shop/index.json",
+    "username": "retro",
+    "password": "manager",
+    "verifyTls": false
+  }
+}

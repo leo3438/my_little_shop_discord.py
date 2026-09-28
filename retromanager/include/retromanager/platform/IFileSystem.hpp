@@ -38,12 +38,20 @@ class IReadStream {
 // Writes are staged and only become visible when close() succeeds, so a
 // crash or a dropped connection never leaves a truncated save or ROM behind.
 // Destroying a stream without calling close() discards the staged data.
+//
+// Staging file convention (see stagingPath()): "/roms/nds/.Game.nds.tmp"
+// for "/roms/nds/Game.nds", renamed over the target on close(). Staging
+// files are hidden from listings.
 class IWriteStream {
   public:
     virtual ~IWriteStream() = default;
     virtual Status write(const char* data, std::size_t size) = 0;
     virtual Status close() = 0;
 };
+
+// "/roms/nds/Game.nds" -> "/roms/nds/.Game.nds.tmp" (expects a normalized path).
+std::string stagingPath(std::string_view path);
+bool isStagingName(std::string_view name);
 
 // The single entry point to the SD card. Every module goes through this
 // interface; none of them may touch <filesystem>, fopen or libnx fs directly.
@@ -80,6 +88,11 @@ class IFileSystem {
 
     // Moves a file or directory. An existing destination file is replaced.
     virtual Status rename(std::string_view from, std::string_view to) = 0;
+
+    // Free bytes available to the application on the volume holding `path`
+    // (an existing file or directory). Unsupported when the platform cannot
+    // tell: callers must then proceed without the check.
+    virtual Result<std::uint64_t> availableSpace(std::string_view path) = 0;
 
     // Convenience helpers built on the primitives above (shared by every
     // implementation, so they behave identically everywhere).

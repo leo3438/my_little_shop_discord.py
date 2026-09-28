@@ -29,6 +29,7 @@
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />
+        <brls:Label id="home/shop" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/retroarch" horizontalAlign="center" />
 
         <brls:Label

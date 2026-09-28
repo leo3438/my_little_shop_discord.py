@@ -29,6 +29,14 @@
             horizontalAlign="center"
             verticalAlign="center" />
 
+        <brls:Label
+            id="games/detail"
+            visibility="gone"
+            fontSize="16"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="60" />
+
         <brls:RecyclerFrame
             id="games/recycler"
             visibility="gone"

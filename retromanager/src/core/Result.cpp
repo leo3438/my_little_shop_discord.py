@@ -17,6 +17,10 @@ const char* toString(ErrorCode code) {
         case ErrorCode::ParseError: return "ParseError";
         case ErrorCode::NetworkError: return "NetworkError";
         case ErrorCode::AuthenticationFailed: return "AuthenticationFailed";
+        case ErrorCode::Cancelled: return "Cancelled";
+        case ErrorCode::InsufficientSpace: return "InsufficientSpace";
+        case ErrorCode::IntegrityError: return "IntegrityError";
+        case ErrorCode::NotConfigured: return "NotConfigured";
     }
     return "Unknown";
 }

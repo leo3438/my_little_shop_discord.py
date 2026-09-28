@@ -10,7 +10,8 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 2 - boutique"
+        "version": "v{} - Phase 3 - téléchargements",
+        "shop": "Boutique : {}"
     },
     "shop": {
         "title": "Boutique",
@@ -22,6 +23,24 @@
         "error_auth": "Le serveur a refusé l'identifiant ou le mot de passe.",
         "error_not_found": "L'index de la boutique est introuvable sur le serveur.",
         "error_format": "L'index de la boutique est invalide ou dans un format non pris en charge.",
-        "error_generic": "Impossible de charger la boutique : {}"
+        "error_generic": "Impossible de charger la boutique : {}",
+        "error_not_configured": "Aucune boutique configurée : indiquez l'URL du NAS dans /switch/RetroManager/config.json.",
+        "hint_download": "Télécharger"
+    },
+    "download": {
+        "title": "Téléchargement",
+        "waiting": "En attente du serveur...",
+        "running": "Téléchargement vers la carte SD...",
+        "cancel": "Annuler",
+        "cancelling": "Annulation...",
+        "close": "Fermer",
+        "done": "Terminé : le jeu est sur votre carte SD.",
+        "cancelled": "Téléchargement annulé : {}",
+        "error_space": "Espace insuffisant sur la carte SD : {} nécessaires, {} disponibles.",
+        "error_network": "La connexion au NAS a été perdue.",
+        "error_not_found": "Ce fichier n'existe plus sur le serveur.",
+        "error_integrity": "Le fichier téléchargé est corrompu (CRC incorrect). Rien n'a été installé.",
+        "error_denied": "Accès refusé (carte SD en lecture seule, ou fichier hébergé sur un autre serveur).",
+        "error_generic": "Le téléchargement a échoué."
     }
 }

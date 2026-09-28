@@ -254,4 +254,21 @@ Status MemoryFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
     return success();
 }
 
+std::uint64_t MemoryFileSystem::usedBytes() const {
+    std::uint64_t used = 0;
+    for (const auto& entry : nodes_) {
+        if (entry.second.type == EntryType::File) used += entry.second.data->size();
+    }
+    return used;
+}
+
+Result<std::uint64_t> MemoryFileSystem::availableSpace(std::string_view rawPath) {
+    auto path = vpath::normalize(rawPath);
+    if (!path) return path.error();
+    if (nodes_.find(path.value()) == nodes_.end()) return makeError(ErrorCode::NotFound, path.value());
+    if (!capacity_) return makeError(ErrorCode::Unsupported, "free space unknown (simulated)");
+    std::uint64_t used = usedBytes();
+    return used >= *capacity_ ? 0 : *capacity_ - used;
+}
+
 }  // namespace rm::test

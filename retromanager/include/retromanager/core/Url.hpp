@@ -1,13 +1,30 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
 #include "retromanager/core/Result.hpp"
 
-// Minimal URL helpers for shop indexes. Not a general-purpose URL library:
+// Minimal URL helpers for shop indexes and source configuration. Not a general-purpose URL library:
 // just what's needed to resolve entries and name files.
 namespace rm::url {
+
+struct UrlParts {
+    std::string scheme;    // lowercase: "ftp", "ftps", "https"...
+    std::string userInfo;  // raw "user[:password]" before '@', may be empty
+    std::string host;      // IPv6 brackets removed, lowercase
+    std::optional<std::uint16_t> port;
+    std::string path;      // raw (still percent-encoded), "/" when empty
+    std::string query;     // without '?'
+    std::string fragment;  // without '#'
+};
+
+// Splits "scheme://[userinfo@]host[:port][/path][?query][#fragment]".
+// Fails with InvalidArgument when there is no scheme, no "//" authority,
+// no host, or an invalid port.
+Result<UrlParts> split(std::string_view url);
 
 // "ftp:", "https:", "smb:"... per RFC 3986 (ALPHA *(ALPHA / DIGIT / "+" / "-" / ".") ":").
 bool hasScheme(std::string_view url);

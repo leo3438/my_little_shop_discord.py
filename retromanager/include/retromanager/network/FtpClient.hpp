@@ -18,13 +18,20 @@ struct FtpConfig {
     bool useTls = false;              // explicit FTPS (AUTH TLS)
     bool verifyPeer = true;           // TLS certificate verification
     long connectTimeoutSeconds = 10;
-    long transferTimeoutSeconds = 60;
+    long transferTimeoutSeconds = 60;   // whole-transfer limit for the (small) index only
+    long stallTimeoutSeconds = 30;      // downloads: abort when no byte arrives for this long
     std::size_t maxIndexBytes = 16 * 1024 * 1024;  // protects the console's RAM
 };
 
 // IRemoteSource over FTP/FTPS, backed by libcurl (available on both desktop
-// and Switch). Phase 2 skeleton: downloads files into memory; streaming ROMs
-// to the SD card comes with Phase 3.
+// and Switch).
+//
+// - fetchIndex() / fetchFile(): small files, into memory, size-capped.
+// - downloadFile(): streamed chunk by chunk (curl's ~256 KiB buffer) into
+//   the caller's sink; nothing proportional to the file size is allocated.
+// - Credentials are only ever sent to the configured host and port: a URL
+//   pointing elsewhere is refused (PermissionDenied), so a malicious index
+//   cannot harvest the NAS password.
 //
 // Thread-safe: each call uses its own curl handle.
 class FtpClient : public IRemoteSource {
@@ -34,6 +41,12 @@ class FtpClient : public IRemoteSource {
     std::string describe() const override;
     std::string indexUrl() const override;
     Result<std::string> fetchIndex() override;
+    Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
+                        const CancellationToken& cancel) override;
+
+    // Server path of `url` when it designates the configured server (same
+    // host and port, ftp:// or ftps://), decoded. PermissionDenied otherwise.
+    Result<std::string> pathOnServer(const std::string& url) const;
 
     // Downloads an arbitrary file (absolute server path) into memory.
     Result<std::string> fetchFile(std::string_view path, std::size_t maxBytes) const;
@@ -43,6 +56,8 @@ class FtpClient : public IRemoteSource {
     static Result<std::string> buildUrl(const FtpConfig& config, std::string_view path);
 
     static Status validate(const FtpConfig& config);
+
+    static constexpr long kReceiveBufferBytes = 256 * 1024;
 
   private:
     FtpConfig config_;

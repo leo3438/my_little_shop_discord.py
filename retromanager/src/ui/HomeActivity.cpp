@@ -6,17 +6,19 @@
 
 namespace rm::ui {
 
-HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop)
-    : context_(context), initStatus_(std::move(initStatus)), shop_(shop) {}
+HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadService& downloads,
+                           EventBus& bus)
+    : context_(context), initStatus_(std::move(initStatus)), shop_(shop), downloads_(downloads), bus_(bus) {}
 
 void HomeActivity::onContentAvailable() {
     openShopButton->registerClickAction([this](brls::View*) {
-        brls::Application::pushActivity(new GamesListActivity(shop_));
+        brls::Application::pushActivity(new GamesListActivity(shop_, downloads_, bus_));
         return true;
     });
 
     platformLabel->setText(brls::getStr("retromanager/home/platform", context_.platformName()));
     sdRootLabel->setText(brls::getStr("retromanager/home/sd_root", context_.sdRootLabel()));
+    shopLabel->setText(brls::getStr("retromanager/home/shop", shop_.sourceDescription()));
     versionLabel->setText(brls::getStr("retromanager/home/version", RM_VERSION));
 
     if (!initStatus_) {

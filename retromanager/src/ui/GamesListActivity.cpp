@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "retromanager/core/Format.hpp"
+#include "retromanager/ui/DownloadActivity.hpp"
 
 namespace rm::ui {
 
@@ -31,13 +32,15 @@ std::string describeForUser(const Error& error) {
         case ErrorCode::NotFound: return brls::getStr("retromanager/shop/error_not_found");
         case ErrorCode::ParseError:
         case ErrorCode::Unsupported: return brls::getStr("retromanager/shop/error_format");
+        case ErrorCode::NotConfigured: return brls::getStr("retromanager/shop/error_not_configured");
         default: return brls::getStr("retromanager/shop/error_generic", error.describe());
     }
 }
 
 class GamesDataSource : public brls::RecyclerDataSource {
   public:
-    explicit GamesDataSource(std::vector<SystemSection> sections) : sections_(std::move(sections)) {}
+    GamesDataSource(std::vector<SystemSection> sections, DownloadService& downloads, EventBus& bus)
+        : sections_(std::move(sections)), downloads_(downloads), bus_(bus) {}
 
     int numberOfSections(brls::RecyclerFrame*) override { return static_cast<int>(sections_.size()); }
 
@@ -64,7 +67,7 @@ class GamesDataSource : public brls::RecyclerDataSource {
     void didSelectRowAt(brls::RecyclerFrame*, brls::IndexPath index) override {
         const GameEntry& game = at(index);
         brls::Logger::info("Game selected: {} [{}] {}", game.title, game.id, game.romUrl);
-        brls::Application::notify(brls::getStr("retromanager/shop/selected", game.title));
+        brls::Application::pushActivity(new DownloadActivity(downloads_, bus_, game));
     }
 
   private:
@@ -73,6 +76,8 @@ class GamesDataSource : public brls::RecyclerDataSource {
     }
 
     std::vector<SystemSection> sections_;
+    DownloadService& downloads_;
+    EventBus& bus_;
 };
 
 }  // namespace
@@ -81,7 +86,8 @@ GameCell::GameCell() { this->inflateFromXMLRes("xml/cells/game_cell.xml"); }
 
 GameCell* GameCell::create() { return new GameCell(); }
 
-GamesListActivity::GamesListActivity(ShopService& shop) : shop_(shop) {}
+GamesListActivity::GamesListActivity(ShopService& shop, DownloadService& downloads, EventBus& bus)
+    : shop_(shop), downloads_(downloads), bus_(bus) {}
 
 GamesListActivity::~GamesListActivity() { *alive_ = false; }
 
@@ -124,13 +130,15 @@ void GamesListActivity::showIndex(const RepoIndex& index) {
 
     statusLabel->setVisibility(brls::Visibility::GONE);
     recycler->setVisibility(brls::Visibility::VISIBLE);
-    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games)));
+    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games), downloads_, bus_));
     brls::Application::giveFocus(recycler);
 }
 
 void GamesListActivity::showError(const Error& error) {
     brls::Logger::error("Shop loading failed: {}", error.describe());
     statusLabel->setText(describeForUser(error));
+    detailLabel->setText(error.message);
+    detailLabel->setVisibility(brls::Visibility::VISIBLE);
 }
 
 }  // namespace rm::ui

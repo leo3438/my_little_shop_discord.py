@@ -28,10 +28,6 @@ Error fromErrorCode(const std::error_code& ec, const std::string& context) {
     return makeError(code, context + ": " + ec.message());
 }
 
-bool endsWith(const std::string& value, const std::string& suffix) {
-    return value.size() >= suffix.size() && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
 // Replaces `target` with `source`. FAT-formatted SD cards refuse to rename
 // over an existing file, so fall back to delete-then-rename there.
 std::error_code replaceFile(const fs::path& source, const fs::path& target) {
@@ -158,7 +154,7 @@ Result<std::vector<DirEntry>> LocalFileSystem::listDirectory(std::string_view ra
     std::vector<DirEntry> entries;
     for (fs::directory_iterator it(toHost(path.value()), ec), end; !ec && it != end; it.increment(ec)) {
         std::string name = it->path().filename().string();
-        if (endsWith(name, kPartialSuffix)) continue;
+        if (isStagingName(name)) continue;
 
         std::error_code entryEc;
         fs::file_status status = it->status(entryEc);
@@ -228,8 +224,7 @@ Result<std::unique_ptr<IWriteStream>> LocalFileSystem::openWrite(std::string_vie
     if (isDirectory(path.value())) return makeError(ErrorCode::IsADirectory, path.value());
 
     fs::path target = toHost(path.value());
-    fs::path staging = target;
-    staging += kPartialSuffix;
+    fs::path staging = toHost(stagingPath(path.value()));
 
     std::FILE* file = std::fopen(staging.string().c_str(), "wb");
     if (file == nullptr) return makeError(ErrorCode::IoError, "cannot create " + path.value());
@@ -290,6 +285,17 @@ Status LocalFileSystem::rename(std::string_view rawFrom, std::string_view rawTo)
         return fromErrorCode(ec, from.value() + " -> " + to.value());
     }
     return success();
+}
+
+Result<std::uint64_t> LocalFileSystem::availableSpace(std::string_view rawPath) {
+    auto path = vpath::normalize(rawPath);
+    if (!path) return path.error();
+    if (auto info = stat(path.value()); !info) return info.error();
+
+    std::error_code ec;
+    fs::space_info space = fs::space(toHost(path.value()), ec);
+    if (ec) return makeError(ErrorCode::Unsupported, "cannot query free space: " + ec.message());
+    return static_cast<std::uint64_t>(space.available);
 }
 
 }  // namespace rm

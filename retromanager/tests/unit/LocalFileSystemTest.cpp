@@ -31,21 +31,42 @@ TEST(LocalFileSystem, NeverTouchesAnythingOutsideTheRoot) {
     EXPECT_TRUE(std::filesystem::exists(outer.path() / "secret.txt"));
 }
 
-TEST(LocalFileSystem, StagingFileIsRemovedAfterCommitAndAbort) {
+TEST(LocalFileSystem, StagesWritesInAHiddenTmpFileNextToTheTarget) {
     test::TempDir dir;
     LocalFileSystem fs(dir.path());
-    const auto staging = dir.path() / (std::string("save.srm") + LocalFileSystem::kPartialSuffix);
+    const auto staging = dir.path() / ".Game.nds.tmp";
 
     {
-        auto stream = fs.openWrite("/save.srm");
+        auto stream = fs.openWrite("/Game.nds");
         ASSERT_TRUE(stream.ok());
         ASSERT_TRUE(stream.value()->write("abc", 3).ok());
-        EXPECT_TRUE(std::filesystem::exists(staging));
+        EXPECT_TRUE(std::filesystem::exists(staging));                  // data goes to .Game.nds.tmp
+        EXPECT_FALSE(std::filesystem::exists(dir.path() / "Game.nds"));  // target untouched
     }
-    EXPECT_FALSE(std::filesystem::exists(staging));
+    EXPECT_FALSE(std::filesystem::exists(staging));  // abandoned: cleaned up
 
-    ASSERT_TRUE(fs.writeFile("/save.srm", "abc").ok());
-    EXPECT_FALSE(std::filesystem::exists(staging));
+    ASSERT_TRUE(fs.writeFile("/Game.nds", "abc").ok());
+    EXPECT_FALSE(std::filesystem::exists(staging));  // committed: renamed
+    EXPECT_TRUE(std::filesystem::is_regular_file(dir.path() / "Game.nds"));
+}
+
+TEST(LocalFileSystem, StaleStagingFileFromACrashIsOverwritten) {
+    test::TempDir dir;
+    { std::ofstream(dir.path() / ".Game.nds.tmp") << "half-written garbage from a power cut"; }
+    LocalFileSystem fs(dir.path());
+
+    ASSERT_TRUE(fs.writeFile("/Game.nds", "good").ok());
+    EXPECT_EQ(fs.readFile("/Game.nds").value(), "good");
+    EXPECT_FALSE(std::filesystem::exists(dir.path() / ".Game.nds.tmp"));
+}
+
+TEST(StagingPath, Convention) {
+    EXPECT_EQ(stagingPath("/roms/nds/Game.nds"), "/roms/nds/.Game.nds.tmp");
+    EXPECT_EQ(stagingPath("/save.srm"), "/.save.srm.tmp");
+    EXPECT_TRUE(isStagingName(".Game.nds.tmp"));
+    EXPECT_FALSE(isStagingName("Game.nds.tmp"));
+    EXPECT_FALSE(isStagingName(".hidden"));
+    EXPECT_FALSE(isStagingName(".tmp"));
 }
 
 TEST(LocalFileSystem, ReadsTheFixtureSdCardInPlace) {

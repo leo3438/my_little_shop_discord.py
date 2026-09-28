@@ -38,19 +38,28 @@ set(RM_WARNINGS -Wall -Wextra -Wpedantic)
 # ---------------------------------------------------------------------------
 add_library(retromanager_core STATIC
     src/core/AppContext.cpp
+    src/core/Crc32.cpp
+    src/core/EventBus.cpp
     src/core/Format.cpp
     src/core/Result.cpp
     src/core/Url.cpp
+    src/core/WorkerThread.cpp
+    src/fs/RomStore.cpp
     src/models/Systems.cpp
     src/network/MockRemoteSource.cpp
+    src/parsers/ConfigParser.cpp
     src/parsers/RepoIndexParser.cpp
+    src/platform/common/BufferedWriteStream.cpp
     src/platform/common/IFileSystem.cpp
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
+    src/services/ConfigManager.cpp
+    src/services/DownloadService.cpp
     src/services/ShopService.cpp
 )
 target_include_directories(retromanager_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(retromanager_core PUBLIC nlohmann_json::nlohmann_json)
+find_package(Threads REQUIRED)
+target_link_libraries(retromanager_core PUBLIC nlohmann_json::nlohmann_json Threads::Threads)
 target_compile_definitions(retromanager_core PUBLIC RM_VERSION="${PROJECT_VERSION}")
 target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
 
@@ -60,7 +69,7 @@ target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
 # ---------------------------------------------------------------------------
 if (RM_WITH_CURL)
     include(Curl)
-    add_library(retromanager_curl STATIC src/network/FtpClient.cpp)
+    add_library(retromanager_curl STATIC src/network/FtpClient.cpp src/network/SourceFactory.cpp)
     target_link_libraries(retromanager_curl PUBLIC retromanager_core PRIVATE CURL::libcurl)
     target_compile_options(retromanager_curl PRIVATE ${RM_WARNINGS})
 endif ()
@@ -86,6 +95,7 @@ if (RM_BUILD_APP)
 
     set(RM_APP_SRC
         src/main.cpp
+        src/ui/DownloadActivity.cpp
         src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp
         ${RM_PLATFORM_SRC}

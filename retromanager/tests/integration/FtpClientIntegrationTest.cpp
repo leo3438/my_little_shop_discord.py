@@ -43,7 +43,7 @@ TEST_F(FtpIntegration, LoadsAndParsesTheShopIndex) {
     auto index = shop.loadIndex();
     ASSERT_TRUE(index.ok()) << index.error().describe();
     EXPECT_EQ(index.value().name, "Test FTP shop");
-    ASSERT_EQ(index.value().games.size(), 2u);
+    ASSERT_EQ(index.value().games.size(), 3u);  // 2 fixture ROMs + the generated Big Test ROM
 
     const std::string base = "ftp://127.0.0.1:" + std::to_string(config.port) + "/shop/";
     EXPECT_EQ(index.value().games[0].romUrl, base + "roms/snes/Super%20Mario%20World%20(USA).sfc");
