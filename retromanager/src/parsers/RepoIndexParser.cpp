@@ -84,10 +84,11 @@ class EntryParser {
         }
 
         GameEntry game;
-        std::string rawUrl, rawBoxart, title, system;
+        std::string rawUrl, rawBoxart, rawCheat, title, system;
         if (!readString(entry, "url", rawUrl, problem) || !readString(entry, "title", title, problem) ||
             !readString(entry, "system", system, problem) || !readString(entry, "region", game.region, problem) ||
-            !readString(entry, "boxart", rawBoxart, problem) || !readString(entry, "id", game.id, problem) ||
+            !readString(entry, "boxart", rawBoxart, problem) || !readString(entry, "cheat_url", rawCheat, problem) ||
+            !readString(entry, "id", game.id, problem) ||
             !readString(entry, "crc32", game.crc32, problem) ||
             !readString(entry, "description", game.description, problem)) {
             return std::nullopt;
@@ -163,6 +164,16 @@ class EntryParser {
                 return std::nullopt;
             }
             game.boxartUrl = boxart.value();
+        }
+
+        // Cheat file (optional, relative allowed)
+        if (!trim(rawCheat).empty()) {
+            auto cheat = url::resolve(baseUrl_, trim(rawCheat));
+            if (!cheat) {
+                problem = "\"cheat_url\": " + cheat.error().message;
+                return std::nullopt;
+            }
+            game.cheatUrl = url::stripFragment(cheat.value());
         }
 
         game.region = trim(game.region);

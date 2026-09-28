@@ -47,14 +47,18 @@ add_library(retromanager_core STATIC
     src/fs/RomStore.cpp
     src/models/Systems.cpp
     src/network/MockRemoteSource.cpp
+    src/parsers/CfgDocument.cpp
     src/parsers/ConfigParser.cpp
     src/parsers/RepoIndexParser.cpp
     src/platform/common/BufferedWriteStream.cpp
     src/platform/common/IFileSystem.cpp
+    src/platform/common/ISystem.cpp
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
+    src/services/CheatManager.cpp
     src/services/ConfigManager.cpp
     src/services/DownloadService.cpp
+    src/services/EmulatorConfigurator.cpp
     src/services/ShopService.cpp
 )
 target_include_directories(retromanager_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

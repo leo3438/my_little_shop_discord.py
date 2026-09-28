@@ -11,12 +11,16 @@
 #include <sstream>
 #include <vector>
 
+#include "MockSdCard.hpp"
 #include "TempDir.hpp"
 #include "retromanager/core/Crc32.hpp"
 #include "retromanager/core/ITaskRunner.hpp"
 #include "retromanager/network/FtpClient.hpp"
 #include "retromanager/platform/LocalFileSystem.hpp"
+#include "retromanager/parsers/CfgDocument.hpp"
+#include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/ShopService.hpp"
 
 using namespace rm;
@@ -67,6 +71,7 @@ class FtpDownload : public ::testing::Test {
         for (const GameEntry& game : index.value().games) {
             if (game.title == "Big Test ROM") big = game;
             if (game.title == "Super Mario World") small = game;
+            if (game.title == "Test DS Game") ds = game;
         }
         ASSERT_FALSE(big.romUrl.empty()) << "server started with --big-mb 0?";
         ASSERT_FALSE(small.romUrl.empty());
@@ -75,6 +80,7 @@ class FtpDownload : public ::testing::Test {
     std::unique_ptr<FtpClient> client;
     GameEntry big;
     GameEntry small;
+    GameEntry ds;
     test::TempDir sd;
 };
 
@@ -89,7 +95,8 @@ DownloadRun download(IRemoteSource& source, IFileSystem& fs, const GameEntry& ga
     ImmediateTaskRunner mainThread;
     EventBus bus(mainThread);
     RomStore store(fs, SdLayout{});
-    DownloadService downloads(source, store, bus, std::make_unique<ImmediateTaskRunner>());
+    NullSystem system;
+    DownloadService downloads(source, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     DownloadRun run;
     auto p = bus.subscribe<DownloadProgressed>([&](const DownloadProgressed& e) {
         run.progress.push_back(e);
@@ -194,6 +201,44 @@ TEST_F(FtpDownload, SinkErrorAbortsTheTransfer) {
     EXPECT_EQ(status.error().code, ErrorCode::IoError);
     EXPECT_EQ(status.error().message, "SD card removed");
     EXPECT_LT(accepted, big.sizeBytes);
+}
+
+TEST_F(FtpDownload, DsGameEndToEndConfiguresRetroArchAndInstallsItsCheat) {
+    // A real SD card layout on disk, then the full pipeline over real FTP.
+    LocalFileSystem fs(sd.path());
+    ASSERT_TRUE(test::copyHostTree(test::fixtureSdCardDir(), fs).ok());
+    ASSERT_FALSE(ds.cheatUrl.empty());
+
+    SdLayout layout;
+    ImmediateTaskRunner mainThread;
+    EventBus bus(mainThread);
+    RomStore store(fs, layout);
+    NullSystem system;
+    EmulatorConfigurator configurator(fs, layout);
+    CheatManager cheats(fs, layout, *client);
+    DownloadService downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    downloads.addPostInstallStep(configurator);
+    downloads.addPostInstallStep(cheats);
+    std::optional<DownloadFinished> finished;
+    auto subscription = bus.subscribe<DownloadFinished>([&](const DownloadFinished& e) { finished = e; });
+
+    downloads.start(ds);
+
+    ASSERT_TRUE(finished.has_value());
+    ASSERT_TRUE(finished->result.ok()) << finished->result.error().describe();
+    ASSERT_EQ(finished->steps.size(), 2u);
+    for (const StepOutcome& step : finished->steps) EXPECT_TRUE(step.result.ok()) << step.id << ": " << step.result.error().describe();
+
+    EXPECT_EQ(fs.readFile("/roms/nds/Test DS Game (Europe).nds").value(), "MOCK ROM nds\n");
+    EXPECT_EQ(CfgDocument::parse(fs.readFile("/retroarch/retroarch.cfg").value()).get("rgui_browser_directory"), "/roms/nds/");
+    EXPECT_TRUE(fs.isFile("/retroarch/retroarch.cfg.rmbak"));
+    auto cht = fs.readFile("/retroarch/cheats/Nintendo - Nintendo DS/Test DS Game (Europe).cht");
+    ASSERT_TRUE(cht.ok()) << cht.error().describe();
+    EXPECT_EQ(CfgDocument::parse(cht.value()).get("cheat1_desc"), "Max Money");
+    // No staging file anywhere.
+    for (auto& entry : std::filesystem::recursive_directory_iterator(sd.path())) {
+        EXPECT_FALSE(isStagingName(entry.path().filename().string())) << entry.path();
+    }
 }
 
 // --- FTPS with a self-signed certificate ----------------------------------

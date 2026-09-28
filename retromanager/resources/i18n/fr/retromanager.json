@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 3 - téléchargements",
+        "version": "v{} - Phase 4 - RetroArch & triches",
         "shop": "Boutique : {}"
     },
     "shop": {
@@ -25,7 +25,8 @@
         "error_format": "L'index de la boutique est invalide ou dans un format non pris en charge.",
         "error_generic": "Impossible de charger la boutique : {}",
         "error_not_configured": "Aucune boutique configurée : indiquez l'URL du NAS dans /switch/RetroManager/config.json.",
-        "hint_download": "Télécharger"
+        "hint_download": "Télécharger",
+        "installed": "INSTALLÉ"
     },
     "download": {
         "title": "Téléchargement",
@@ -41,6 +42,14 @@
         "error_not_found": "Ce fichier n'existe plus sur le serveur.",
         "error_integrity": "Le fichier téléchargé est corrompu (CRC incorrect). Rien n'a été installé.",
         "error_denied": "Accès refusé (carte SD en lecture seule, ou fichier hébergé sur un autre serveur).",
-        "error_generic": "Le téléchargement a échoué."
+        "error_generic": "Le téléchargement a échoué.",
+        "configuring": "Configuration de l'émulateur...",
+        "step_retroarch_ok": "RetroArch : le navigateur de fichiers s'ouvrira sur {}",
+        "step_retroarch_missing": "RetroArch n'est pas installé : rien à configurer.",
+        "step_retroarch_failed": "Impossible de configurer RetroArch ({}).",
+        "step_cheats_ok": "Codes de triche installés (menu RetroArch > Codes de triche > Charger).",
+        "step_cheats_missing": "Codes de triche ignorés : RetroArch absent ou fichier de triche introuvable.",
+        "step_cheats_failed": "Impossible d'installer les codes de triche ({}).",
+        "please_wait": "Patientez..."
     }
 }

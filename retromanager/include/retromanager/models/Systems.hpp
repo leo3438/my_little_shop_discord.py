@@ -10,6 +10,9 @@ struct SystemInfo {
     std::string id;           // lowercase, stable: used in indexes and as /roms/<id>
     std::string displayName;
     std::vector<std::string> extensions;  // lowercase, with the dot
+    // Folder name used by the libretro databases (cheats, thumbnails),
+    // e.g. "Nintendo - Nintendo DS". Empty when there is no single one.
+    std::string libretroName;
 };
 
 // Catalogue of the systems RetroManager knows about.

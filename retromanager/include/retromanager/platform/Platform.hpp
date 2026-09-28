@@ -4,6 +4,7 @@
 #include <string>
 
 #include "retromanager/platform/IFileSystem.hpp"
+#include "retromanager/platform/ISystem.hpp"
 
 namespace rm {
 
@@ -14,6 +15,7 @@ struct PlatformServices {
     std::string name;         // "Nintendo Switch", "Desktop"
     std::string sdRootLabel;  // human readable root, e.g. "sdmc:/" or a host folder
     std::shared_ptr<IFileSystem> fileSystem;
+    std::shared_ptr<ISystem> system;
 };
 
 PlatformServices createPlatformServices();

@@ -21,7 +21,8 @@ std::string foldCase(const std::string& value) {
 
 }  // namespace
 
-ShopService::ShopService(IRemoteSource& source, ITaskRunner& tasks) : source_(source), tasks_(tasks) {}
+ShopService::ShopService(IRemoteSource& source, ITaskRunner& tasks, RomStore* store)
+    : source_(source), tasks_(tasks), store_(store) {}
 
 Result<RepoIndex> ShopService::loadIndex() {
     auto document = source_.fetchIndex();
@@ -29,11 +30,24 @@ Result<RepoIndex> ShopService::loadIndex() {
     return RepoIndexParser(source_.indexUrl()).parse(document.value());
 }
 
-void ShopService::loadIndexAsync(IndexCallback onDone) {
+Result<ShopListing> ShopService::loadListing() {
+    auto index = loadIndex();
+    if (!index) return index.error();
+    ShopListing listing;
+    listing.index = std::move(index.value());
+    if (store_ != nullptr) {
+        for (const GameEntry& game : listing.index.games) {
+            if (store_->isInstalled(game)) listing.installedIds.insert(game.id);
+        }
+    }
+    return listing;
+}
+
+void ShopService::loadIndexAsync(ListingCallback onDone) {
     tasks_.runInBackground([this, onDone = std::move(onDone)]() mutable {
         // Result has no default constructor: carry it through a shared_ptr
         // so the main-thread task stays copyable (std::function requirement).
-        auto result = std::make_shared<Result<RepoIndex>>(loadIndex());
+        auto result = std::make_shared<Result<ShopListing>>(loadListing());
         tasks_.runOnMainThread([onDone = std::move(onDone), result]() { onDone(std::move(*result)); });
     });
 }

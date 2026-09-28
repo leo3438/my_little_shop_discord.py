@@ -28,6 +28,7 @@ PlatformServices createPlatformServices() {
         "Desktop",
         absolute.string(),
         std::make_shared<LocalFileSystem>(absolute),
+        std::make_shared<NullSystem>(),  // a desktop has no sleep timer to hold off
     };
 }
 

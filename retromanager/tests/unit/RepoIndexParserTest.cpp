@@ -163,6 +163,28 @@ TEST(RepoIndexParser, StripsUtf8ByteOrderMark) {
     EXPECT_EQ(index.games.size(), 1u);
 }
 
+TEST(RepoIndexParser, ReadsOptionalCheatUrl) {
+    RepoIndex index = parseOk(R"({"games": [
+        {"url": "roms/nds/a.nds", "cheat_url": "cheats/nds/a.cht"},
+        {"url": "roms/nds/b.nds", "cheat_url": "https://cheats.example/b.cht"},
+        {"url": "roms/nds/c.nds"}
+    ]})",
+                              "ftp://nas/shop/index.json");
+    ASSERT_EQ(index.games.size(), 3u);
+    EXPECT_EQ(index.games[0].cheatUrl, "ftp://nas/shop/cheats/nds/a.cht");
+    EXPECT_EQ(index.games[1].cheatUrl, "https://cheats.example/b.cht");
+    EXPECT_EQ(index.games[2].cheatUrl, "");
+}
+
+TEST(RepoIndexParser, SkipsEntriesWithInvalidCheatUrl) {
+    RepoIndex index = parseOk(R"({"games": [
+        {"url": "ftp://n/a.nds", "cheat_url": 12},
+        {"url": "ftp://n/b.nds", "cheat_url": "relative/without/base.cht"}
+    ]})");
+    EXPECT_TRUE(index.games.empty());
+    EXPECT_EQ(index.warnings.size(), 2u);
+}
+
 // --- rejected documents --------------------------------------------------
 
 TEST(RepoIndexParser, RejectsMalformedJsonWithPosition) {

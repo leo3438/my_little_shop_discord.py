@@ -20,19 +20,19 @@ const std::vector<SystemInfo>& all() {
     // Only unambiguous extensions: archives and disc images are shared by
     // many systems and must be tagged explicitly in the index.
     static const std::vector<SystemInfo> catalogue = {
-        {"nes", "Nintendo NES", {".nes", ".fds"}},
-        {"snes", "Super Nintendo", {".sfc", ".smc"}},
-        {"n64", "Nintendo 64", {".n64", ".z64", ".v64"}},
-        {"gb", "Game Boy", {".gb"}},
-        {"gbc", "Game Boy Color", {".gbc"}},
-        {"gba", "Game Boy Advance", {".gba"}},
-        {"nds", "Nintendo DS", {".nds"}},
-        {"mastersystem", "Sega Master System", {".sms"}},
-        {"megadrive", "Sega Mega Drive", {".md", ".gen", ".smd"}},
-        {"gamegear", "Sega Game Gear", {".gg"}},
-        {"pcengine", "PC Engine", {".pce"}},
-        {"psx", "PlayStation", {".pbp"}},
-        {"arcade", "Arcade", {}},
+        {"nes", "Nintendo NES", {".nes", ".fds"}, "Nintendo - Nintendo Entertainment System"},
+        {"snes", "Super Nintendo", {".sfc", ".smc"}, "Nintendo - Super Nintendo Entertainment System"},
+        {"n64", "Nintendo 64", {".n64", ".z64", ".v64"}, "Nintendo - Nintendo 64"},
+        {"gb", "Game Boy", {".gb"}, "Nintendo - Game Boy"},
+        {"gbc", "Game Boy Color", {".gbc"}, "Nintendo - Game Boy Color"},
+        {"gba", "Game Boy Advance", {".gba"}, "Nintendo - Game Boy Advance"},
+        {"nds", "Nintendo DS", {".nds"}, "Nintendo - Nintendo DS"},
+        {"mastersystem", "Sega Master System", {".sms"}, "Sega - Master System - Mark III"},
+        {"megadrive", "Sega Mega Drive", {".md", ".gen", ".smd"}, "Sega - Mega Drive - Genesis"},
+        {"gamegear", "Sega Game Gear", {".gg"}, "Sega - Game Gear"},
+        {"pcengine", "PC Engine", {".pce"}, "NEC - PC Engine - TurboGrafx 16"},
+        {"psx", "PlayStation", {".pbp"}, "Sony - PlayStation"},
+        {"arcade", "Arcade", {}, ""},  // FBNeo and MAME databases differ
     };
     return catalogue;
 }

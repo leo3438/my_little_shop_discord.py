@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <deque>
 #include <vector>
 
@@ -26,6 +27,35 @@ GameEntry game(std::uint64_t size, std::string url = kUrl) {
     return entry;
 }
 
+// Records keep-awake requests.
+class FakeSystem : public ISystem {
+  public:
+    void setKeepAwake(bool keepAwake) override {
+        awake = keepAwake;
+        calls.push_back(keepAwake);
+    }
+    bool awake = false;
+    std::vector<bool> calls;
+};
+
+// Scripted post-install step.
+class FakeStep : public IPostInstallStep {
+  public:
+    FakeStep(std::string id, std::optional<Status> outcome) : id_(std::move(id)), outcome_(std::move(outcome)) {}
+    std::string id() const override { return id_; }
+    std::optional<Status> run(const GameEntry& game, const std::string& romPath, const CancellationToken&) override {
+        ranFor.push_back(game.id);
+        paths.push_back(romPath);
+        return outcome_;
+    }
+    std::vector<std::string> ranFor;
+    std::vector<std::string> paths;
+
+  private:
+    std::string id_;
+    std::optional<Status> outcome_;
+};
+
 // Everything synchronous: start() runs the whole download inline and events
 // are delivered immediately, so tests read like a script.
 struct Fixture {
@@ -34,7 +64,8 @@ struct Fixture {
     RomStore store{fs, SdLayout{}};
     ImmediateTaskRunner mainThread;
     EventBus bus{mainThread};
-    DownloadService downloads{source, store, bus, std::make_unique<ImmediateTaskRunner>()};
+    FakeSystem system;
+    DownloadService downloads{source, store, bus, system, std::make_unique<ImmediateTaskRunner>()};
 
     std::vector<DownloadStarted> started;
     std::vector<DownloadProgressed> progress;
@@ -43,6 +74,12 @@ struct Fixture {
     EventBus::Subscription s2 =
         bus.subscribe<DownloadProgressed>([this](const DownloadProgressed& e) { progress.push_back(e); });
     EventBus::Subscription s3 = bus.subscribe<DownloadFinished>([this](const DownloadFinished& e) { finished.push_back(e); });
+    std::vector<std::string> order;  // event sequence
+    EventBus::Subscription s4 =
+        bus.subscribe<DownloadProgressed>([this](const DownloadProgressed&) { order.push_back("progress"); });
+    EventBus::Subscription s5 =
+        bus.subscribe<DownloadConfiguring>([this](const DownloadConfiguring&) { order.push_back("configuring"); });
+    EventBus::Subscription s6 = bus.subscribe<DownloadFinished>([this](const DownloadFinished&) { order.push_back("finished"); });
 };
 
 }  // namespace
@@ -272,7 +309,8 @@ TEST(DownloadService, RunsOnItsWorkerAndJoinsOnDestruction) {
 
     auto begin = std::chrono::steady_clock::now();
     {
-        DownloadService downloads(source, store, bus,
+        NullSystem system;
+        DownloadService downloads(source, store, bus, system,
                                   std::make_unique<WorkerThread>([&](std::function<void()> t) { mainThread.runOnMainThread(t); }));
         downloads.start(game(64 * 1024 * 1024));
         EXPECT_EQ(downloads.activeCount(), 1u);  // start() returned while the transfer runs
@@ -282,4 +320,122 @@ TEST(DownloadService, RunsOnItsWorkerAndJoinsOnDestruction) {
 
     EXPECT_LT(elapsed, std::chrono::milliseconds(1500));
     EXPECT_FALSE(fs.exists("/roms/nds/Game.nds"));
+}
+
+// --- keep awake ------------------------------------------------------------
+
+TEST(DownloadService, KeepsTheConsoleAwakeDuringTheTransferOnly) {
+    Fixture f;
+    f.source.addSyntheticFile(kUrl, 1024 * 1024);
+    bool awakeWhileTransferring = false;
+    EventBus::Subscription probe =
+        f.bus.subscribe<DownloadProgressed>([&](const DownloadProgressed&) { awakeWhileTransferring = f.system.awake; });
+
+    f.downloads.start(game(1024 * 1024));
+
+    EXPECT_TRUE(awakeWhileTransferring);
+    EXPECT_EQ(f.system.calls, (std::vector<bool>{true, false}));
+    EXPECT_FALSE(f.system.awake);
+}
+
+TEST(DownloadService, ReleasesTheAwakeLockOnEveryFailurePath) {
+    {  // cancelled
+        Fixture f;
+        f.source.addSyntheticFile(kUrl, 4 * 1024 * 1024);
+        EventBus::Subscription cancel =
+            f.bus.subscribe<DownloadProgressed>([&](const DownloadProgressed& e) { f.downloads.cancel(e.id); });
+        f.downloads.start(game(4 * 1024 * 1024));
+        EXPECT_EQ(f.finished.at(0).result.error().code, ErrorCode::Cancelled);
+        EXPECT_FALSE(f.system.awake);
+    }
+    {  // network error
+        Fixture f;
+        f.source.addSyntheticFile(kUrl, 1024 * 1024);
+        f.source.setDownloadFailure(1000, makeError(ErrorCode::NetworkError, "reset"));
+        f.downloads.start(game(1024 * 1024));
+        EXPECT_FALSE(f.system.awake);
+        EXPECT_EQ(f.system.calls, (std::vector<bool>{true, false}));
+    }
+    {  // refused before any transfer
+        Fixture f;
+        f.fs.setCapacity(1024);
+        f.downloads.start(game(1024 * 1024));
+        EXPECT_FALSE(f.system.awake);
+    }
+}
+
+TEST(AwakeLock, IsReferenceCounted) {
+    FakeSystem system;
+    AwakeLock::Holder holder(system);
+    auto first = holder.acquire();
+    auto second = holder.acquire();
+    EXPECT_EQ(system.calls, (std::vector<bool>{true}));  // one request for two users
+    first.reset();
+    EXPECT_TRUE(system.awake);
+    second.reset();
+    EXPECT_EQ(system.calls, (std::vector<bool>{true, false}));
+    EXPECT_EQ(holder.activeLocks(), 0);
+}
+
+// --- post-install steps ----------------------------------------------------
+
+TEST(DownloadService, RunsPostInstallStepsAfterTheRomIsCommitted) {
+    Fixture f;
+    f.source.addSyntheticFile(kUrl, 1000);
+    FakeStep retroarch("retroarch", success());
+    FakeStep cheats("cheats", std::nullopt);  // not applicable to this game
+    f.downloads.addPostInstallStep(retroarch);
+    f.downloads.addPostInstallStep(cheats);
+    bool romPresentDuringSteps = false;
+    EventBus::Subscription probe = f.bus.subscribe<DownloadConfiguring>(
+        [&](const DownloadConfiguring&) { romPresentDuringSteps = f.fs.isFile("/roms/nds/Game.nds"); });
+
+    f.downloads.start(game(1000));
+
+    EXPECT_TRUE(romPresentDuringSteps);
+    EXPECT_EQ(retroarch.paths, (std::vector<std::string>{"/roms/nds/Game.nds"}));
+    EXPECT_EQ(cheats.ranFor.size(), 1u);
+    ASSERT_EQ(f.finished.size(), 1u);
+    EXPECT_TRUE(f.finished[0].result.ok());
+    EXPECT_EQ(f.finished[0].gameId, "nds/Game.nds");
+    ASSERT_EQ(f.finished[0].steps.size(), 1u);  // the nullopt step is not reported
+    EXPECT_EQ(f.finished[0].steps[0].id, "retroarch");
+    EXPECT_TRUE(f.finished[0].steps[0].result.ok());
+
+    ASSERT_GE(f.order.size(), 3u);
+    EXPECT_EQ(f.order[f.order.size() - 2], "configuring");
+    EXPECT_EQ(f.order.back(), "finished");
+}
+
+TEST(DownloadService, AFailingStepNeverUndoesTheInstall) {
+    Fixture f;
+    f.source.addSyntheticFile(kUrl, 1000);
+    FakeStep broken("retroarch", Status(makeError(ErrorCode::PermissionDenied, "cfg read-only")));
+    FakeStep cheats("cheats", success());
+    f.downloads.addPostInstallStep(broken);
+    f.downloads.addPostInstallStep(cheats);
+
+    f.downloads.start(game(1000));
+
+    ASSERT_EQ(f.finished.size(), 1u);
+    EXPECT_TRUE(f.finished[0].result.ok());
+    EXPECT_TRUE(f.fs.isFile("/roms/nds/Game.nds"));
+    ASSERT_EQ(f.finished[0].steps.size(), 2u);  // later steps still run
+    EXPECT_EQ(f.finished[0].steps[0].result.error().code, ErrorCode::PermissionDenied);
+    EXPECT_TRUE(f.finished[0].steps[1].result.ok());
+}
+
+TEST(DownloadService, StepsDoNotRunWhenTheInstallFails) {
+    Fixture f;
+    f.source.addFile(kUrl, "123456789");
+    FakeStep step("retroarch", success());
+    f.downloads.addPostInstallStep(step);
+    GameEntry corrupt = game(9);
+    corrupt.crc32 = "00000000";
+
+    f.downloads.start(corrupt);
+
+    EXPECT_TRUE(step.ranFor.empty());
+    EXPECT_TRUE(f.finished.at(0).steps.empty());
+    EXPECT_EQ(std::count(f.order.begin(), f.order.end(), "configuring"), 0);
 }

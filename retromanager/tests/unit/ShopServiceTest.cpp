@@ -3,6 +3,7 @@
 #include <deque>
 #include <optional>
 
+#include "MemoryFileSystem.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/services/ShopService.hpp"
 
@@ -124,9 +125,9 @@ TEST(ShopService, AsyncFetchesInBackgroundAndAnswersOnMainThread) {
     ShopService shop(source, tasks);
 
     std::optional<std::size_t> received;
-    shop.loadIndexAsync([&](Result<RepoIndex> index) {
-        ASSERT_TRUE(index.ok());
-        received = index.value().games.size();
+    shop.loadIndexAsync([&](Result<ShopListing> listing) {
+        ASSERT_TRUE(listing.ok());
+        received = listing.value().index.games.size();
     });
 
     EXPECT_EQ(source.fetchCount(), 0);  // nothing ran on the caller's thread
@@ -149,7 +150,7 @@ TEST(ShopService, AsyncDeliversErrors) {
     ShopService shop(source, tasks);
 
     std::optional<ErrorCode> code;
-    shop.loadIndexAsync([&](Result<RepoIndex> index) { code = index.ok() ? ErrorCode::IoError : index.error().code; });
+    shop.loadIndexAsync([&](Result<ShopListing> listing) { code = listing.ok() ? ErrorCode::IoError : listing.error().code; });
     EXPECT_EQ(code, ErrorCode::NetworkError);
 }
 
@@ -179,4 +180,33 @@ TEST(ShopService, GroupsBySystemSortedByDisplayName) {
 
 TEST(ShopService, GroupingEmptyListGivesNoSection) {
     EXPECT_TRUE(ShopService::groupBySystem({}).empty());
+}
+
+TEST(ShopService, ReportsWhichGamesAreAlreadyOnTheCard) {
+    test::MemoryFileSystem fs;
+    ASSERT_TRUE(fs.createDirectories("/roms/nds").ok());
+    ASSERT_TRUE(fs.writeFile("/roms/nds/Pokemon Platine (France).nds", "rom").ok());
+    RomStore store(fs, SdLayout{});
+    MockRemoteSource source;
+    ImmediateTaskRunner tasks;
+    ShopService shop(source, tasks, &store);
+
+    std::optional<ShopListing> received;
+    shop.loadIndexAsync([&](Result<ShopListing> listing) {
+        ASSERT_TRUE(listing.ok());
+        received = listing.value();
+    });
+
+    ASSERT_TRUE(received.has_value());
+    EXPECT_EQ(received->installedIds, (std::set<std::string>{"nds/Pokemon Platine (France).nds"}));
+}
+
+TEST(ShopService, WithoutAStoreNothingIsInstalled) {
+    MockRemoteSource source;
+    ImmediateTaskRunner tasks;
+    ShopService shop(source, tasks);
+    auto listing = shop.loadListing();
+    ASSERT_TRUE(listing.ok());
+    EXPECT_TRUE(listing.value().installedIds.empty());
+    EXPECT_GE(listing.value().index.games.size(), 10u);
 }

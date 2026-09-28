@@ -26,6 +26,28 @@ std::string describeFailure(const DownloadFinished& event) {
     }
 }
 
+// One line per post-install step outcome.
+std::string describeStep(const StepOutcome& step, const std::string& romFolder) {
+    const bool ok = step.result.ok();
+    const bool missing = !ok && step.result.error().code == ErrorCode::NotFound;
+    if (step.id == "retroarch") {
+        if (ok) return brls::getStr("retromanager/download/step_retroarch_ok", romFolder);
+        if (missing) return brls::getStr("retromanager/download/step_retroarch_missing");
+        return brls::getStr("retromanager/download/step_retroarch_failed", step.result.error().describe());
+    }
+    if (step.id == "cheats") {
+        if (ok) return brls::getStr("retromanager/download/step_cheats_ok");
+        if (missing) return brls::getStr("retromanager/download/step_cheats_missing");
+        return brls::getStr("retromanager/download/step_cheats_failed", step.result.error().describe());
+    }
+    return step.id + ": " + (ok ? "OK" : step.result.error().describe());
+}
+
+std::string parentFolder(const std::string& path) {
+    std::size_t slash = path.rfind('/');
+    return slash == std::string::npos ? path : path.substr(0, slash + 1);
+}
+
 }  // namespace
 
 DownloadActivity::DownloadActivity(DownloadService& downloads, EventBus& bus, GameEntry game)
@@ -41,6 +63,7 @@ void DownloadActivity::onContentAvailable() {
     destinationLabel->setText("");
     statsLabel->setText(game_.sizeBytes > 0 ? formatBytes(game_.sizeBytes) : "");
     statusLabel->setText(brls::getStr("retromanager/download/waiting"));
+    stepsLabel->setText("");
     setProgress(0);
 
     // B cancels while running, closes once finished. Registered on the
@@ -53,6 +76,7 @@ void DownloadActivity::onContentAvailable() {
     // Subscribe before starting: every event of this download is seen.
     started_ = bus_.subscribe<DownloadStarted>([this](const DownloadStarted& e) { onStarted(e); });
     progressed_ = bus_.subscribe<DownloadProgressed>([this](const DownloadProgressed& e) { onProgress(e); });
+    configuring_ = bus_.subscribe<DownloadConfiguring>([this](const DownloadConfiguring& e) { onConfiguring(e); });
     finished_ = bus_.subscribe<DownloadFinished>([this](const DownloadFinished& e) { onFinished(e); });
     id_ = downloads_.start(game_);
 }
@@ -76,17 +100,36 @@ void DownloadActivity::onProgress(const DownloadProgressed& event) {
     }
 }
 
+void DownloadActivity::onConfiguring(const DownloadConfiguring& event) {
+    if (event.id != id_) return;
+    // The ROM is installed: cancelling now would only skip the extras.
+    state_ = State::Configuring;
+    setProgress(1.0);
+    statusLabel->setText(brls::getStr("retromanager/download/configuring"));
+    root->setActionAvailable(brls::BUTTON_B, false);  // also refreshes the hints bar
+    actionButton->setState(brls::ButtonState::DISABLED);
+    actionButton->setText(brls::getStr("retromanager/download/please_wait"));  // the bordered style hides DISABLED
+}
+
 void DownloadActivity::onFinished(const DownloadFinished& event) {
     if (event.id != id_) return;
     state_ = State::Finished;
     actionButton->setText(brls::getStr("retromanager/download/close"));
     root->updateActionHint(brls::BUTTON_B, brls::getStr("retromanager/download/close"));
-    brls::Application::getGlobalHintsUpdateEvent()->fire();  // updateActionHint alone does not redraw the hints
+    root->setActionAvailable(brls::BUTTON_B, true);  // re-enabled after configuring; refreshes the hints bar
+    actionButton->setState(brls::ButtonState::ENABLED);
 
     if (event.result.ok()) {
         brls::Logger::info("Installed {} -> {}", game_.title, event.destination);
         setProgress(1.0);
         statusLabel->setText(brls::getStr("retromanager/download/done"));
+        std::string report;
+        for (const StepOutcome& step : event.steps) {
+            if (!step.result.ok()) brls::Logger::warning("Post-install {}: {}", step.id, step.result.error().describe());
+            if (!report.empty()) report += "\n";
+            report += describeStep(step, parentFolder(event.destination));
+        }
+        stepsLabel->setText(report);
         return;
     }
     if (event.result.error().code == ErrorCode::Cancelled) {
@@ -107,7 +150,8 @@ bool DownloadActivity::onBack() {
             statusLabel->setText(brls::getStr("retromanager/download/cancelling"));
             downloads_.cancel(id_);  // DownloadFinished{Cancelled} follows and closes the screen
             break;
-        case State::Cancelling: break;
+        case State::Cancelling:
+        case State::Configuring: break;
         case State::Finished: close(); break;
     }
     return true;

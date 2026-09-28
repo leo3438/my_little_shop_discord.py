@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -23,12 +24,13 @@ struct GameEntry {
     std::string crc32;        // 8 lowercase hex digits, may be empty
     std::optional<int> year;
     std::string description;
+    std::string cheatUrl;     // absolute URL of a RetroArch .cht file, may be empty
 
     bool operator==(const GameEntry& other) const {
         return id == other.id && title == other.title && system == other.system && region == other.region &&
                sizeBytes == other.sizeBytes && romUrl == other.romUrl && fileName == other.fileName &&
                boxartUrl == other.boxartUrl && crc32 == other.crc32 && year == other.year &&
-               description == other.description;
+               description == other.description && cheatUrl == other.cheatUrl;
     }
 };
 
@@ -40,6 +42,12 @@ struct RepoIndex {
     // Non-fatal problems: skipped entries, ignored fields. Worth logging,
     // never worth refusing the whole shop over.
     std::vector<std::string> warnings;
+};
+
+// What the shop screen shows: the index plus what the SD card already has.
+struct ShopListing {
+    RepoIndex index;
+    std::set<std::string> installedIds;  // GameEntry::id of the games whose ROM is on the card
 };
 
 // Games of one system, as displayed in a sectioned list.

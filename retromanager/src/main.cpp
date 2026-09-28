@@ -11,8 +11,10 @@
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/platform/Platform.hpp"
+#include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/ConfigManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/ShopService.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
@@ -104,9 +106,13 @@ int main(int argc, char* argv[]) {
     rm::ui::BorealisTaskRunner uiTasks;
     rm::EventBus bus(uiTasks);
     rm::RomStore romStore(context.fileSystem(), context.layout());
-    rm::ShopService shop(*shopSource, uiTasks);
-    rm::DownloadService downloads(*shopSource, romStore, bus,
+    rm::ShopService shop(*shopSource, uiTasks, &romStore);
+    rm::EmulatorConfigurator emulatorConfigurator(context.fileSystem(), context.layout());
+    rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *shopSource);
+    rm::DownloadService downloads(*shopSource, romStore, bus, *platform.system,
                                   std::make_unique<rm::WorkerThread>([](std::function<void()> task) { brls::sync(task); }));
+    downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch at it
+    downloads.addPostInstallStep(cheatManager);          // then its cheats, when the shop has some
 
     brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, bus));
 

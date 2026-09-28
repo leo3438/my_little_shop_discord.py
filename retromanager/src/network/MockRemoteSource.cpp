@@ -19,6 +19,7 @@ struct DemoGame {
     const char* path;  // relative to the index, percent-encoded
     int year;
     const char* boxart;
+    const char* cheat = nullptr;  // relative .cht URL
 };
 
 // Single source of truth for the demo shop: the index and the synthetic
@@ -26,11 +27,13 @@ struct DemoGame {
 const std::vector<DemoGame>& demoGames() {
     static const std::vector<DemoGame> games = {
         {"Pokémon Platine", "nds", "EUR", 134217728, "roms/nds/Pokemon%20Platine%20(France).nds", 2009,
-         "boxart/nds/pokemon-platine.png"},
-        {"Mario Kart DS", "nds", "EUR", 33554432, "roms/nds/Mario%20Kart%20DS%20(Europe).nds", 2005, nullptr},
+         "boxart/nds/pokemon-platine.png", "cheats/nds/Pokemon%20Platine%20(France).cht"},
+        {"Mario Kart DS", "nds", "EUR", 33554432, "roms/nds/Mario%20Kart%20DS%20(Europe).nds", 2005, nullptr,
+         "cheats/nds/Mario%20Kart%20DS%20(Europe).cht"},
         {"The Legend of Zelda: A Link to the Past", "snes", "USA", 1048576,
          "roms/snes/Legend%20of%20Zelda,%20The%20-%20A%20Link%20to%20the%20Past%20(USA).sfc", 1991, nullptr},
-        {"Super Mario World", "snes", "USA", 524288, "roms/snes/Super%20Mario%20World%20(USA).sfc", 1990, nullptr},
+        {"Super Mario World", "snes", "USA", 524288, "roms/snes/Super%20Mario%20World%20(USA).sfc", 1990, nullptr,
+         "cheats/snes/Super%20Mario%20World%20(USA).cht"},
         {"Super Metroid", "snes", "EUR", 3145728, "roms/snes/Super%20Metroid%20(Europe).sfc", 1994, nullptr},
         {"Chrono Trigger", "snes", "USA", 4194304, "roms/snes/Chrono%20Trigger%20(USA).sfc", 1995, nullptr},
         {"Advance Wars", "gba", "USA", 8388608, "roms/gba/Advance%20Wars%20(USA).gba", 2001, nullptr},
@@ -65,6 +68,7 @@ std::string MockRemoteSource::demoIndex() {
         entry["size"] = game.size;
         entry["url"] = game.path;
         if (game.boxart != nullptr) entry["boxart"] = game.boxart;
+        if (game.cheat != nullptr) entry["cheat_url"] = game.cheat;
         entry["year"] = game.year;
         index["games"].push_back(entry);
     }
@@ -81,6 +85,15 @@ MockRemoteSource::MockRemoteSource() : document_(demoIndex()), indexUrl_(kDemoIn
     for (const DemoGame& game : demoGames()) {
         auto url = url::resolve(indexUrl_, game.path);
         if (url) addSyntheticFile(url.value(), game.size);
+        if (game.cheat != nullptr) {
+            auto cheatUrl = url::resolve(indexUrl_, game.cheat);
+            if (cheatUrl) {
+                addFile(cheatUrl.value(), std::string("cheats = 2\n\n") + "cheat0_desc = \"" + game.title +
+                                              " - Demo cheat 1\"\ncheat0_code = \"00000000+00000000\"\ncheat0_enable = false\n\n" +
+                                              "cheat1_desc = \"" + game.title +
+                                              " - Demo cheat 2\"\ncheat1_code = \"00000000+00000001\"\ncheat1_enable = false\n");
+            }
+        }
     }
 }
 

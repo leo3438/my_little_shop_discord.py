@@ -49,7 +49,16 @@
             id="download/status"
             width="900"
             horizontalAlign="center"
-            marginBottom="40" />
+            marginBottom="16" />
+
+        <!-- Post-install report: one line per step (RetroArch, cheats). -->
+        <brls:Label
+            id="download/steps"
+            width="900"
+            fontSize="18"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="32" />
 
         <brls:Button
             id="download/action"

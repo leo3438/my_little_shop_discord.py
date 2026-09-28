@@ -32,6 +32,12 @@ TEST(Systems, ExtensionsAreUniqueAcrossSystems) {
     }
 }
 
+TEST(Systems, KnowsLibretroFolderNames) {
+    EXPECT_EQ(systems::find("nds")->libretroName, "Nintendo - Nintendo DS");
+    EXPECT_EQ(systems::find("snes")->libretroName, "Nintendo - Super Nintendo Entertainment System");
+    EXPECT_EQ(systems::find("arcade")->libretroName, "");
+}
+
 TEST(Systems, DisplayNameFallsBackToId) {
     EXPECT_EQ(systems::displayName("gba"), "Game Boy Advance");
     EXPECT_EQ(systems::displayName("unknown"), "unknown");

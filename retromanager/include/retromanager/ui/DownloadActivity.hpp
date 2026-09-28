@@ -21,10 +21,11 @@ class DownloadActivity : public brls::Activity {
     void onContentAvailable() override;
 
   private:
-    enum class State { Running, Cancelling, Finished };
+    enum class State { Running, Cancelling, Configuring, Finished };
 
     void onStarted(const DownloadStarted& event);
     void onProgress(const DownloadProgressed& event);
+    void onConfiguring(const DownloadConfiguring& event);
     void onFinished(const DownloadFinished& event);
     bool onBack();
     void close();
@@ -36,7 +37,7 @@ class DownloadActivity : public brls::Activity {
     DownloadId id_ = 0;
     State state_ = State::Running;
     bool closing_ = false;
-    EventBus::Subscription started_, progressed_, finished_;
+    EventBus::Subscription started_, progressed_, configuring_, finished_;
 
     BRLS_BIND(brls::Box, root, "download/root");
     BRLS_BIND(brls::Label, titleLabel, "download/title");
@@ -45,6 +46,7 @@ class DownloadActivity : public brls::Activity {
     BRLS_BIND(brls::Rectangle, fill, "download/fill");
     BRLS_BIND(brls::Label, statsLabel, "download/stats");
     BRLS_BIND(brls::Label, statusLabel, "download/status");
+    BRLS_BIND(brls::Label, stepsLabel, "download/steps");
     BRLS_BIND(brls::Button, actionButton, "download/action");
 };
 

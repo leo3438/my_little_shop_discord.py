@@ -1,0 +1,9 @@
+cheats = 2
+
+cheat0_desc = "Infinite Health"
+cheat0_code = "021C0000+0000FFFF"
+cheat0_enable = false
+
+cheat1_desc = "Max Money"
+cheat1_code = "021C1000+0098967F"
+cheat1_enable = false

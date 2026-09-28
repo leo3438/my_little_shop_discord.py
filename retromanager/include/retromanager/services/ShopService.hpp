@@ -6,6 +6,7 @@
 
 #include "retromanager/core/ITaskRunner.hpp"
 #include "retromanager/core/Result.hpp"
+#include "retromanager/fs/RomStore.hpp"
 #include "retromanager/models/GameEntry.hpp"
 #include "retromanager/network/IRemoteSource.hpp"
 
@@ -16,18 +17,22 @@ namespace rm {
 // never sees the parser nor the transport.
 class ShopService {
   public:
-    using IndexCallback = std::function<void(Result<RepoIndex>)>;
+    using ListingCallback = std::function<void(Result<ShopListing>)>;
 
-    // Both dependencies must outlive the service.
-    ShopService(IRemoteSource& source, ITaskRunner& tasks);
+    // Dependencies must outlive the service. Without a store, nothing is
+    // reported as installed.
+    ShopService(IRemoteSource& source, ITaskRunner& tasks, RomStore* store = nullptr);
 
     std::string sourceDescription() const { return source_.describe(); }
 
     // Blocking: fetch + parse on the calling thread.
     Result<RepoIndex> loadIndex();
 
-    // Fetch + parse in the background; `onDone` runs on the main thread.
-    void loadIndexAsync(IndexCallback onDone);
+    // Blocking: loadIndex() plus the SD card check of every entry.
+    Result<ShopListing> loadListing();
+
+    // loadListing() in the background; `onDone` runs on the main thread.
+    void loadIndexAsync(ListingCallback onDone);
 
     // Sections sorted by display name, games sorted by title within each
     // section (case-insensitive). Unknown systems come last.
@@ -36,6 +41,7 @@ class ShopService {
   private:
     IRemoteSource& source_;
     ITaskRunner& tasks_;
+    RomStore* store_;
 };
 
 }  // namespace rm

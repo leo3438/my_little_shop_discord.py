@@ -39,8 +39,9 @@ std::string describeForUser(const Error& error) {
 
 class GamesDataSource : public brls::RecyclerDataSource {
   public:
-    GamesDataSource(std::vector<SystemSection> sections, DownloadService& downloads, EventBus& bus)
-        : sections_(std::move(sections)), downloads_(downloads), bus_(bus) {}
+    GamesDataSource(std::vector<SystemSection> sections, std::shared_ptr<const std::set<std::string>> installed,
+                    DownloadService& downloads, EventBus& bus)
+        : sections_(std::move(sections)), installed_(std::move(installed)), downloads_(downloads), bus_(bus) {}
 
     int numberOfSections(brls::RecyclerFrame*) override { return static_cast<int>(sections_.size()); }
 
@@ -59,8 +60,10 @@ class GamesDataSource : public brls::RecyclerDataSource {
     brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override {
         auto* cell = static_cast<GameCell*>(recycler->dequeueReusableCell("Game"));
         const GameEntry& game = at(index);
+        cell->gameId = game.id;
         cell->title->setText(game.title);
         cell->detail->setText(detailLine(game));
+        cell->setInstalled(installed_->count(game.id) > 0);
         return cell;
     }
 
@@ -76,6 +79,7 @@ class GamesDataSource : public brls::RecyclerDataSource {
     }
 
     std::vector<SystemSection> sections_;
+    std::shared_ptr<const std::set<std::string>> installed_;
     DownloadService& downloads_;
     EventBus& bus_;
 };
@@ -86,6 +90,10 @@ GameCell::GameCell() { this->inflateFromXMLRes("xml/cells/game_cell.xml"); }
 
 GameCell* GameCell::create() { return new GameCell(); }
 
+void GameCell::setInstalled(bool installed) {
+    installedTag->setVisibility(installed ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+}
+
 GamesListActivity::GamesListActivity(ShopService& shop, DownloadService& downloads, EventBus& bus)
     : shop_(shop), downloads_(downloads), bus_(bus) {}
 
@@ -93,7 +101,12 @@ GamesListActivity::~GamesListActivity() { *alive_ = false; }
 
 void GamesListActivity::onContentAvailable() {
     recycler->estimatedRowHeight = 70;
-    recycler->registerCell("Game", []() { return GameCell::create(); });
+    recycler->registerCell("Game", [this]() {
+        GameCell* cell = GameCell::create();
+        cells_.push_back(cell);
+        return cell;
+    });
+    downloadFinished_ = bus_.subscribe<DownloadFinished>([this](const DownloadFinished& e) { onDownloadFinished(e); });
     load();
 }
 
@@ -104,20 +117,31 @@ void GamesListActivity::load() {
     brls::Application::giveFocus(statusLabel);
 
     std::weak_ptr<bool> alive = alive_;
-    shop_.loadIndexAsync([this, alive](Result<RepoIndex> index) {
+    shop_.loadIndexAsync([this, alive](Result<ShopListing> listing) {
         auto flag = alive.lock();
         if (!flag || !*flag) return;  // screen closed while loading
-        if (index.ok()) {
-            showIndex(index.value());
+        if (listing.ok()) {
+            showListing(listing.value());
         } else {
-            showError(index.error());
+            showError(listing.error());
         }
     });
 }
 
-void GamesListActivity::showIndex(const RepoIndex& index) {
+void GamesListActivity::onDownloadFinished(const DownloadFinished& event) {
+    if (!event.result.ok() || event.gameId.empty()) return;
+    installed_->insert(event.gameId);
+    for (GameCell* cell : cells_) {
+        if (cell->gameId == event.gameId) cell->setInstalled(true);
+    }
+}
+
+void GamesListActivity::showListing(const ShopListing& listing) {
+    const RepoIndex& index = listing.index;
+    *installed_ = listing.installedIds;
     for (const std::string& warning : index.warnings) brls::Logger::warning("Shop index: {}", warning);
-    brls::Logger::info("Shop \"{}\": {} games", index.name, index.games.size());
+    brls::Logger::info("Shop \"{}\": {} games, {} already installed", index.name, index.games.size(),
+                       listing.installedIds.size());
 
     if (!index.motd.empty()) {
         motdLabel->setText(index.motd);
@@ -130,7 +154,7 @@ void GamesListActivity::showIndex(const RepoIndex& index) {
 
     statusLabel->setVisibility(brls::Visibility::GONE);
     recycler->setVisibility(brls::Visibility::VISIBLE);
-    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games), downloads_, bus_));
+    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games), installed_, downloads_, bus_));
     brls::Application::giveFocus(recycler);
 }
 
