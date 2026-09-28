@@ -280,17 +280,49 @@ TEST(SysClkConfigurator, OnlyDemandingSystemsAreBoosted) {
     CancellationToken cancel;
     EXPECT_FALSE(sysclk.run(gameFor("snes"), "/roms/snes/Game", cancel).has_value());
     EXPECT_FALSE(sysclk.run(gameFor("nds"), "/roms/nds/Game", cancel).has_value());
-    for (const char* system : {"n64", "psx", "3ds"}) {
+    // 3DS runs in Citra (standalone), not RetroArch: never a RetroArch profile.
+    EXPECT_FALSE(sysclk.run(gameFor("3ds"), "/roms/3ds/Game", cancel).has_value());
+    for (const char* system : {"n64", "psx"}) {
         auto result = sysclk.run(gameFor(system), "/roms/x/Game", cancel);
         ASSERT_TRUE(result.has_value()) << system;
         EXPECT_TRUE(result->ok()) << system;
     }
 }
 
-TEST(SysClkConfigurator, AddsTheRetroArchProfileAndKeepsTheRest) {
+TEST(SysClkConfigurator, DefaultsToTheAlbumAppletThatRunsHbmenuHomebrews) {
+    EXPECT_STREQ(SysClkConfigurator::kDefaultTitleId, "010000000000100D");
+}
+
+TEST(SysClkConfigurator, RaisesTheAlbumProfileAndKeepsTheRest) {
     auto sd = test::makeMockSdCard();
     const std::string before = sd->readFile(kSysClkIni).value();
     SysClkConfigurator sysclk(*sd, SdLayout{});
+
+    ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
+
+    const std::string after = sd->readFile(kSysClkIni).value();
+    // Only the Album section changes: its value in place, the missing key after it.
+    EXPECT_EQ(after,
+              "; Mock sys-clk configuration\n"
+              "[values]\n"
+              "temp_log_interval_ms=0\n"
+              "freq_log_interval_ms=0\n"
+              "\n"
+              "; Album applet (homebrew launched from hbmenu): mild handheld boost\n"
+              "[010000000000100D]\n"
+              "handheld_cpu=1785\n"
+              "docked_cpu=1785\n"
+              "\n"
+              "; Mario Kart 8 Deluxe\n"
+              "[0100152000022000]\n"
+              "docked_gpu=921\n");
+    EXPECT_EQ(sd->readFile(sysclk.backupPath()).value(), before);
+}
+
+TEST(SysClkConfigurator, AddsAMissingProfileAtTheEnd) {
+    auto sd = test::makeMockSdCard();
+    const std::string before = sd->readFile(kSysClkIni).value();
+    SysClkConfigurator sysclk(*sd, SdLayout{}, "05B9D58000000000");
 
     ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
 
@@ -299,14 +331,12 @@ TEST(SysClkConfigurator, AddsTheRetroArchProfileAndKeepsTheRest) {
     IniDocument ini = IniDocument::parse(after);
     EXPECT_EQ(ini.get("05B9D58000000000", "handheld_cpu"), "1785");
     EXPECT_EQ(ini.get("05B9D58000000000", "docked_cpu"), "1785");
-    EXPECT_EQ(ini.get("010000000000100D", "docked_cpu"), "1785");  // user's own profile still there
-    EXPECT_EQ(sd->readFile(sysclk.backupPath()).value(), before);
 }
 
 TEST(SysClkConfigurator, RaisesAnExistingProfileWithoutTouchingItsOtherKeys) {
     auto sd = test::makeMockSdCard();
     ASSERT_TRUE(sd->writeFile(kSysClkIni, "[05b9d58000000000]\nhandheld_cpu=1020\nhandheld_gpu=307\n").ok());
-    SysClkConfigurator sysclk(*sd, SdLayout{});
+    SysClkConfigurator sysclk(*sd, SdLayout{}, "05B9D58000000000");  // title id case differs from the file
 
     ASSERT_TRUE(sysclk.applyMaxCpuProfile().ok());
     EXPECT_EQ(sd->readFile(kSysClkIni).value(),

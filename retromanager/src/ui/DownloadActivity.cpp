@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "retromanager/core/Format.hpp"
+#include "retromanager/models/Systems.hpp"
 
 namespace rm::ui {
 
@@ -27,13 +28,24 @@ std::string describeFailure(const DownloadFinished& event) {
 }
 
 // One line per post-install step outcome.
-std::string describeStep(const StepOutcome& step, const std::string& romFolder) {
+std::string describeStep(const StepOutcome& step, const std::string& romFolder, const GameEntry& game) {
     const bool ok = step.result.ok();
     const bool missing = !ok && step.result.error().code == ErrorCode::NotFound;
     if (step.id == "retroarch") {
         if (ok) return brls::getStr("retromanager/download/step_retroarch_ok", romFolder);
         if (missing) return brls::getStr("retromanager/download/step_retroarch_missing");
         return brls::getStr("retromanager/download/step_retroarch_failed", step.result.error().describe());
+    }
+    if (step.id == "playlist") {
+        const SystemInfo* system = systems::find(game.system);
+        if (ok) return brls::getStr("retromanager/download/step_playlist_ok", system ? system->libretroName : game.system);
+        if (missing) return brls::getStr("retromanager/download/step_playlist_missing");
+        return brls::getStr("retromanager/download/step_playlist_failed", step.result.error().describe());
+    }
+    if (step.id == "boxart") {
+        if (ok) return brls::getStr("retromanager/download/step_boxart_ok");
+        if (missing) return brls::getStr("retromanager/download/step_boxart_missing");
+        return brls::getStr("retromanager/download/step_boxart_failed", step.result.error().describe());
     }
     if (step.id == "cheats") {
         if (ok) return brls::getStr("retromanager/download/step_cheats_ok");
@@ -132,7 +144,7 @@ void DownloadActivity::onFinished(const DownloadFinished& event) {
         for (const StepOutcome& step : event.steps) {
             if (!step.result.ok()) brls::Logger::warning("Post-install {}: {}", step.id, step.result.error().describe());
             if (!report.empty()) report += "\n";
-            report += describeStep(step, parentFolder(event.destination));
+            report += describeStep(step, parentFolder(event.destination), game_);
         }
         stepsLabel->setText(report);
         return;

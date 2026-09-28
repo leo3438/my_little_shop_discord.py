@@ -6,7 +6,9 @@
 #include <optional>
 #include <unordered_set>
 
+#include "retromanager/core/Md5.hpp"
 #include "retromanager/core/Url.hpp"
+#include "retromanager/models/Bios.hpp"
 #include "retromanager/models/Systems.hpp"
 
 namespace rm {
@@ -84,15 +86,17 @@ class EntryParser {
         }
 
         GameEntry game;
-        std::string rawUrl, rawBoxart, rawCheat, title, system;
+        std::string rawUrl, rawBoxart, rawBoxartAlias, rawCheat, title, system;
         if (!readString(entry, "url", rawUrl, problem) || !readString(entry, "title", title, problem) ||
             !readString(entry, "system", system, problem) || !readString(entry, "region", game.region, problem) ||
-            !readString(entry, "boxart", rawBoxart, problem) || !readString(entry, "cheat_url", rawCheat, problem) ||
+            !readString(entry, "boxart", rawBoxart, problem) || !readString(entry, "url_boxart", rawBoxartAlias, problem) ||
+            !readString(entry, "cheat_url", rawCheat, problem) ||
             !readString(entry, "id", game.id, problem) ||
             !readString(entry, "crc32", game.crc32, problem) ||
             !readString(entry, "description", game.description, problem)) {
             return std::nullopt;
         }
+        if (trim(rawBoxart).empty()) rawBoxart = rawBoxartAlias;  // "url_boxart": same meaning
 
         // URL (required). Tinfoil convention: "#name" gives the file name.
         if (trim(rawUrl).empty()) {
@@ -197,6 +201,77 @@ Status readMetadata(const json& root, const char* key, std::string& out) {
     return success();
 }
 
+// "bios": [{"file", "system", "url", "md5", "size"}]. Lenient like games:
+// a bad entry (or a bad section) is a warning, never a reason to refuse the shop.
+void parseBios(const json& root, const std::string& baseUrl, RepoIndex& index) {
+    auto section = root.find("bios");
+    if (section == root.end() || section->is_null()) return;
+    if (!section->is_array()) {
+        index.warnings.push_back("\"bios\" must be an array; ignored");
+        return;
+    }
+    std::unordered_set<std::string> seen;
+    for (std::size_t i = 0; i < section->size(); ++i) {
+        const json& entry = (*section)[i];
+        std::string where = "bios[" + std::to_string(i) + "] skipped: ";
+        if (!entry.is_object()) {
+            index.warnings.push_back(where + "entry must be an object");
+            continue;
+        }
+        std::string problem, file, system, rawUrl, md5;
+        if (!readString(entry, "file", file, problem) || !readString(entry, "system", system, problem) ||
+            !readString(entry, "url", rawUrl, problem) || !readString(entry, "md5", md5, problem)) {
+            index.warnings.push_back(where + problem);
+            continue;
+        }
+        if (trim(rawUrl).empty()) {
+            index.warnings.push_back(where + "missing \"url\"");
+            continue;
+        }
+        auto resolved = url::resolve(baseUrl, trim(rawUrl));
+        if (!resolved) {
+            index.warnings.push_back(where + "\"url\": " + resolved.error().message);
+            continue;
+        }
+        BiosEntry bios;
+        bios.url = resolved.value();
+        bios.fileName = trim(file);
+        if (bios.fileName.empty()) {
+            auto parts = url::split(bios.url);
+            if (parts) {
+                std::string path = parts.value().path;
+                bios.fileName = url::percentDecode(path.substr(path.rfind('/') + 1));
+            }
+        }
+        if (!bios::isSafeFileName(bios.fileName)) {
+            index.warnings.push_back(where + "unsafe file name \"" + bios.fileName + "\"");
+            continue;
+        }
+        md5 = toLower(trim(md5));
+        if (!md5.empty() && !Md5::isDigest(md5)) {
+            index.warnings.push_back(where + "\"md5\" must be 32 hexadecimal digits");
+            continue;
+        }
+        bios.md5 = md5;
+        if (auto size = entry.find("size"); size != entry.end() && !size->is_null()) {
+            if (!size->is_number_unsigned()) {
+                index.warnings.push_back(where + "\"size\" must be a non-negative integer");
+                continue;
+            }
+            bios.sizeBytes = size->get<std::uint64_t>();
+        }
+        bios.system = toLower(trim(system));
+        if (bios.system.empty()) {
+            if (const BiosFile* known = bios::find(bios.fileName)) bios.system = known->system;
+        }
+        if (!seen.insert(toLower(bios.fileName)).second) {
+            index.warnings.push_back(where + "duplicate file \"" + bios.fileName + "\"");
+            continue;
+        }
+        index.bios.push_back(std::move(bios));
+    }
+}
+
 }  // namespace
 
 RepoIndexParser::RepoIndexParser(std::string baseUrl) : baseUrl_(std::move(baseUrl)) {}
@@ -239,6 +314,7 @@ Result<RepoIndex> RepoIndexParser::parse(std::string_view document) const {
     EntryParser entries(baseUrl_, index);
     if (games != root.end()) entries.parseArray(*games, "games");
     if (files != root.end()) entries.parseArray(*files, "files");
+    parseBios(root, baseUrl_, index);
 
     if (root.contains("directories")) {
         index.warnings.push_back("\"directories\" (Tinfoil sub-indexes) is not supported yet and was ignored");

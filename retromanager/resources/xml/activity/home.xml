@@ -13,12 +13,12 @@
             text="@i18n/retromanager/home/welcome"
             fontSize="36"
             horizontalAlign="center"
-            marginBottom="20" />
+            marginBottom="12" />
 
         <brls:Label
             text="@i18n/retromanager/home/subtitle"
             horizontalAlign="center"
-            marginBottom="40" />
+            marginBottom="28" />
 
         <brls:Button
             id="home/open_shop"
@@ -32,7 +32,14 @@
             style="bordered"
             width="400"
             text="@i18n/retromanager/sync/open"
-            marginBottom="40" />
+            marginBottom="16" />
+
+        <brls:Button
+            id="home/bios"
+            style="bordered"
+            width="400"
+            text="@i18n/retromanager/bios/open"
+            marginBottom="32" />
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />
@@ -44,6 +51,6 @@
             id="home/version"
             fontSize="16"
             horizontalAlign="center"
-            marginTop="40" />
+            marginTop="24" />
     </brls:Box>
 </brls:AppletFrame>

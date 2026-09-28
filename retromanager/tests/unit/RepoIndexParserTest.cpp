@@ -297,3 +297,13 @@ TEST(RepoIndexParser, WarnsAboutUnsupportedTinfoilDirectories) {
     RepoIndex index = parseOk(R"({"directories": ["ftp://n/more/"], "files": []})");
     EXPECT_EQ(index.warnings.size(), 1u);
 }
+
+TEST(RepoIndexParser, AcceptsUrlBoxartAsAnAliasOfBoxart) {
+    RepoIndex index = parseOk(R"({"games": [
+        {"url": "roms/nds/A.nds", "url_boxart": "boxart/nds/A.png"},
+        {"url": "roms/nds/B.nds", "boxart": "boxart/nds/B.png", "url_boxart": "ignored.png"}
+    ]})", "ftp://nas.local/shop/index.json");
+    ASSERT_EQ(index.games.size(), 2u);
+    EXPECT_EQ(index.games[0].boxartUrl, "ftp://nas.local/shop/boxart/nds/A.png");
+    EXPECT_EQ(index.games[1].boxartUrl, "ftp://nas.local/shop/boxart/nds/B.png");  // "boxart" wins
+}

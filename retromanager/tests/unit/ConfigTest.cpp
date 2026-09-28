@@ -18,7 +18,7 @@ AppConfig sample() {
     config.shop.verifyTls = true;
     config.savesUrl = "ftp://nas.local:2121/Saves/";
     config.sysclk.enabled = false;
-    config.sysclk.titleId = "010000000000100D";
+    config.sysclk.titleId = "05B9D58000000000";
     return config;
 }
 
@@ -63,7 +63,7 @@ TEST(ConfigParser, ReadsSavesAndSysClkSettings) {
     EXPECT_EQ(parsed.value().sysclk.titleId, "0100000000001000");
 
     AppConfig defaults;
-    EXPECT_EQ(defaults.sysclk.titleId, "05B9D58000000000");
+    EXPECT_EQ(defaults.sysclk.titleId, "010000000000100D");  // Album: RetroArch .nro run from hbmenu
     EXPECT_TRUE(defaults.savesUrl.empty());
 
     EXPECT_EQ(parseConfig(R"({"saves_url": 3})").error().code, ErrorCode::ParseError);

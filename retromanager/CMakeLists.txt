@@ -41,27 +41,34 @@ add_library(retromanager_core STATIC
     src/core/Crc32.cpp
     src/core/EventBus.cpp
     src/core/Format.cpp
+    src/core/Md5.cpp
     src/core/Result.cpp
     src/core/Url.cpp
     src/core/WorkerThread.cpp
     src/fs/RomStore.cpp
+    src/models/Bios.cpp
     src/models/Systems.cpp
     src/network/MockRemoteSource.cpp
     src/parsers/CfgDocument.cpp
     src/parsers/ConfigParser.cpp
     src/parsers/IniDocument.cpp
+    src/parsers/PlaylistDocument.cpp
     src/parsers/RepoIndexParser.cpp
     src/platform/common/BufferedWriteStream.cpp
     src/platform/common/IFileSystem.cpp
     src/platform/common/ISystem.cpp
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
+    src/services/BiosManager.cpp
     src/services/CheatManager.cpp
     src/services/CloudSyncService.cpp
     src/services/ConfigManager.cpp
     src/services/DownloadService.cpp
     src/services/EmulatorConfigurator.cpp
+    src/services/PlaylistManager.cpp
+    src/services/RetroArchPaths.cpp
     src/services/SysClkConfigurator.cpp
+    src/services/ThumbnailManager.cpp
     src/services/ShopService.cpp
     src/services/SyncPlanner.cpp
 )
@@ -103,6 +110,7 @@ if (RM_BUILD_APP)
 
     set(RM_APP_SRC
         src/main.cpp
+        src/ui/BiosActivity.cpp
         src/ui/DownloadActivity.cpp
         src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp

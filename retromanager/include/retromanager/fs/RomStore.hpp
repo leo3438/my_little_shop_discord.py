@@ -36,6 +36,7 @@ class RomInstall {
 
     const std::string& destination() const { return destination_; }
     std::uint64_t bytesWritten() const { return written_; }
+    std::string crc32() const { return crc_.hex(); }  // of the bytes written so far
 
   private:
     std::string destination_;

@@ -6,8 +6,8 @@
 #include <ctime>
 
 #include "retromanager/core/Url.hpp"
-#include "retromanager/parsers/CfgDocument.hpp"
 #include "retromanager/platform/VirtualPath.hpp"
+#include "retromanager/services/RetroArchPaths.hpp"
 
 namespace rm {
 
@@ -67,15 +67,7 @@ bool CloudSyncService::isSaveFile(std::string_view name) {
 }
 
 std::string CloudSyncService::localSavesDirectory() const {
-    auto cfg = fs_.readFile(layout_.retroarchCfg);
-    if (cfg) {
-        auto configured = CfgDocument::parse(cfg.value()).get("savefile_directory");
-        if (configured && !configured->empty() && configured->front() == '/') {
-            auto normalized = vpath::normalize(*configured);
-            if (normalized) return normalized.value();
-        }
-    }
-    return layout_.savesDir;
+    return retroarch::configuredDirectory(fs_, layout_, "savefile_directory", layout_.savesDir);
 }
 
 std::string CloudSyncService::remoteUrlFor(const std::string& relative) const {

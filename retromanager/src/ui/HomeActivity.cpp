@@ -2,18 +2,20 @@
 
 #include <utility>
 
+#include "retromanager/ui/BiosActivity.hpp"
 #include "retromanager/ui/GamesListActivity.hpp"
 #include "retromanager/ui/SyncActivity.hpp"
 
 namespace rm::ui {
 
 HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadService& downloads,
-                           CloudSyncService& cloudSync, EventBus& bus)
+                           CloudSyncService& cloudSync, BiosManager& bios, EventBus& bus)
     : context_(context),
       initStatus_(std::move(initStatus)),
       shop_(shop),
       downloads_(downloads),
       cloudSync_(cloudSync),
+      bios_(bios),
       bus_(bus) {}
 
 void HomeActivity::onContentAvailable() {
@@ -23,6 +25,10 @@ void HomeActivity::onContentAvailable() {
     });
     syncButton->registerClickAction([this](brls::View*) {
         brls::Application::pushActivity(new SyncActivity(cloudSync_, bus_));
+        return true;
+    });
+    biosButton->registerClickAction([this](brls::View*) {
+        brls::Application::pushActivity(new BiosActivity(bios_, shop_, bus_));
         return true;
     });
 

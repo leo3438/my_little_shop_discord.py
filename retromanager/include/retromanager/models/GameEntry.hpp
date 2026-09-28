@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "retromanager/models/Bios.hpp"
+
 namespace rm {
 
 // One downloadable game, as advertised by a shop index.
@@ -39,6 +41,7 @@ struct RepoIndex {
     std::string name;     // shop name, may be empty
     std::string motd;     // message of the day (Tinfoil's "success" field), may be empty
     std::vector<GameEntry> games;
+    std::vector<BiosEntry> bios;  // "bios" section: system files the shop can provide
     // Non-fatal problems: skipped entries, ignored fields. Worth logging,
     // never worth refusing the whole shop over.
     std::vector<std::string> warnings;

@@ -11,13 +11,16 @@
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/platform/Platform.hpp"
+#include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/CloudSyncService.hpp"
 #include "retromanager/services/ConfigManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
+#include "retromanager/services/PlaylistManager.hpp"
 #include "retromanager/services/ShopService.hpp"
 #include "retromanager/services/SysClkConfigurator.hpp"
+#include "retromanager/services/ThumbnailManager.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
 
@@ -127,7 +130,7 @@ int main(int argc, char* argv[]) {
     brls::Application::setGlobalQuit(true);  // + quits from any screen
 
     // Declaration order matters: destroyed in reverse, the services with a
-    // worker (sync, downloads) go first (cancel and join) while everything
+    // worker (BIOS, sync, downloads) go first (cancel and join) while everything
     // they use still lives.
     RemoteSources remotes = createRemoteSources(context);
     rm::ui::BorealisTaskRunner uiTasks;
@@ -136,17 +139,23 @@ int main(int argc, char* argv[]) {
     rm::RomStore romStore(context.fileSystem(), context.layout());
     rm::ShopService shop(*remotes.shop, uiTasks, &romStore);
     rm::EmulatorConfigurator emulatorConfigurator(context.fileSystem(), context.layout());
+    rm::PlaylistManager playlists(context.fileSystem(), context.layout());
+    rm::ThumbnailManager thumbnails(context.fileSystem(), context.layout(), *remotes.shop);
     rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shop);
     rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.sysclk.titleId);
     rm::DownloadService downloads(*remotes.shop, romStore, bus, *platform.system,
                                   std::make_unique<rm::WorkerThread>(onMainThread));
-    downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch at it
+    downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch's browser at it
+    downloads.addPostInstallStep(playlists);             // list it in its system's playlist
+    downloads.addPostInstallStep(thumbnails);            // with its box art, when the shop has one
     downloads.addPostInstallStep(cheatManager);          // then its cheats, when the shop has some
     if (remotes.sysclk.enabled) downloads.addPostInstallStep(sysClk);  // N64/PS1/3DS: full CPU speed
     rm::CloudSyncService cloudSync(context.fileSystem(), context.layout(), *remotes.saves, remotes.savesBaseUrl, bus,
                                    *platform.system, std::make_unique<rm::WorkerThread>(onMainThread));
+    rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shop, bus,
+                         std::make_unique<rm::WorkerThread>(onMainThread));
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bus));
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, bus));
 
     while (brls::Application::mainLoop()) {
     }

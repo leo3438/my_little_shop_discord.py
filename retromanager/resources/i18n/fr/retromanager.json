@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 5 - Sauvegardes cloud & sys-clk",
+        "version": "v{} - Phase 6 - Playlists, jaquettes & BIOS",
         "shop": "Boutique : {}",
         "saves": "Sauvegardes cloud : {}",
         "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
@@ -55,7 +55,13 @@
         "please_wait": "Patientez...",
         "step_sysclk_ok": "sys-clk : CPU à 1785 MHz pour RetroArch.",
         "step_sysclk_missing": "sys-clk n'est pas installé : fréquences inchangées.",
-        "step_sysclk_failed": "Impossible de configurer sys-clk ({})."
+        "step_sysclk_failed": "Impossible de configurer sys-clk ({}).",
+        "step_playlist_ok": "Ajouté à la playlist « {} » de RetroArch.",
+        "step_playlist_missing": "RetroArch n'est pas installé : pas de playlist.",
+        "step_playlist_failed": "Impossible d'ajouter le jeu à la playlist ({}).",
+        "step_boxart_ok": "Jaquette téléchargée.",
+        "step_boxart_missing": "Jaquette ignorée : RetroArch absent ou image introuvable sur le serveur.",
+        "step_boxart_failed": "Impossible d'installer la jaquette ({})."
     },
     "sync": {
         "title": "Sauvegardes cloud",
@@ -77,5 +83,28 @@
         "error_network": "Impossible de joindre le NAS des sauvegardes. Vérifiez le réseau.",
         "error_denied": "Accès refusé (dossier du NAS en lecture seule, ou carte SD protégée).",
         "error_generic": "La synchronisation a échoué."
+    },
+    "bios": {
+        "open": "Vérification des BIOS",
+        "title": "BIOS",
+        "folder": "Dossier système de RetroArch : {}",
+        "loading": "Recherche des BIOS proposés par {}...",
+        "all_present": "Tous les BIOS sont présents.",
+        "summary": "{} BIOS manquant(s), dont {} disponible(s) sur le serveur. A : télécharger, X : tout télécharger.",
+        "shop_unavailable": "Serveur injoignable : seul l'état de la carte SD est affiché.",
+        "other_system": "Autres",
+        "required": "requis",
+        "download_all": "Tout télécharger",
+        "downloading": "Téléchargement...",
+        "installed": "{} BIOS installé(s)",
+        "state_ok": "Présent (vérifié)",
+        "state_unverified": "Présent",
+        "state_unrecognized": "Version non reconnue",
+        "state_unrecognized_offer": "Version non reconnue · A : remplacer",
+        "state_missing": "Manquant",
+        "state_missing_offer": "Manquant · A : télécharger",
+        "failed": "Échec du téléchargement",
+        "failed_integrity": "Fichier du serveur corrompu (MD5)",
+        "summary_none": "{} BIOS manquant(s), aucun disponible sur le serveur."
     }
 }

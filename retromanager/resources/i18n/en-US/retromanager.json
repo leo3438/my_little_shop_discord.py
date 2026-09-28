@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 5 - Cloud saves & sys-clk",
+        "version": "v{} - Phase 6 - Playlists, box art & BIOS",
         "shop": "Shop: {}",
         "saves": "Cloud saves: {}",
         "saves_not_configured": "Cloud saves: not configured (saves_url)"
@@ -55,7 +55,13 @@
         "please_wait": "Please wait...",
         "step_sysclk_ok": "sys-clk: CPU at 1785 MHz for RetroArch.",
         "step_sysclk_missing": "sys-clk is not installed: clocks unchanged.",
-        "step_sysclk_failed": "Cannot configure sys-clk ({})."
+        "step_sysclk_failed": "Cannot configure sys-clk ({}).",
+        "step_playlist_ok": "Added to the RetroArch playlist \"{}\".",
+        "step_playlist_missing": "RetroArch is not installed: no playlist.",
+        "step_playlist_failed": "Cannot add the game to the playlist ({}).",
+        "step_boxart_ok": "Box art downloaded.",
+        "step_boxart_missing": "Box art skipped: RetroArch missing or image not found on the server.",
+        "step_boxart_failed": "Cannot install the box art ({})."
     },
     "sync": {
         "title": "Cloud saves",
@@ -77,5 +83,28 @@
         "error_network": "Cannot reach the saves NAS. Check the network.",
         "error_denied": "Access denied (read-only NAS folder, or protected SD card).",
         "error_generic": "The synchronization failed."
+    },
+    "bios": {
+        "open": "BIOS check",
+        "title": "BIOS",
+        "folder": "RetroArch system folder: {}",
+        "loading": "Looking for the BIOS files offered by {}...",
+        "all_present": "Every BIOS file is present.",
+        "summary": "{} missing BIOS file(s), {} available on the server. A: download, X: download all.",
+        "shop_unavailable": "Server unreachable: only the SD card state is shown.",
+        "other_system": "Other",
+        "required": "required",
+        "download_all": "Download all",
+        "downloading": "Downloading...",
+        "installed": "{} BIOS file(s) installed",
+        "state_ok": "Present (verified)",
+        "state_unverified": "Present",
+        "state_unrecognized": "Unrecognized version",
+        "state_unrecognized_offer": "Unrecognized version · A: replace",
+        "state_missing": "Missing",
+        "state_missing_offer": "Missing · A: download",
+        "failed": "Download failed",
+        "failed_integrity": "Corrupted file on the server (MD5)",
+        "summary_none": "{} missing BIOS file(s), none available on the server."
     }
 }

@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <optional>
@@ -18,10 +19,14 @@
 #include "retromanager/network/FtpClient.hpp"
 #include "retromanager/platform/LocalFileSystem.hpp"
 #include "retromanager/parsers/CfgDocument.hpp"
+#include "retromanager/parsers/PlaylistDocument.hpp"
+#include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
+#include "retromanager/services/PlaylistManager.hpp"
 #include "retromanager/services/ShopService.hpp"
+#include "retromanager/services/ThumbnailManager.hpp"
 
 using namespace rm;
 
@@ -105,6 +110,12 @@ DownloadRun download(IRemoteSource& source, IFileSystem& fs, const GameEntry& ga
     auto f = bus.subscribe<DownloadFinished>([&](const DownloadFinished& e) { run.finished = e; });
     downloads.start(game);
     return run;
+}
+
+std::string Crc32Hex(std::string_view data) {
+    Crc32 crc;
+    crc.update(data.data(), data.size());
+    return crc.hex();
 }
 
 }  // namespace
@@ -203,7 +214,7 @@ TEST_F(FtpDownload, SinkErrorAbortsTheTransfer) {
     EXPECT_LT(accepted, big.sizeBytes);
 }
 
-TEST_F(FtpDownload, DsGameEndToEndConfiguresRetroArchAndInstallsItsCheat) {
+TEST_F(FtpDownload, DsGameEndToEndIntegratesWithRetroArch) {
     // A real SD card layout on disk, then the full pipeline over real FTP.
     LocalFileSystem fs(sd.path());
     ASSERT_TRUE(test::copyHostTree(test::fixtureSdCardDir(), fs).ok());
@@ -215,9 +226,13 @@ TEST_F(FtpDownload, DsGameEndToEndConfiguresRetroArchAndInstallsItsCheat) {
     RomStore store(fs, layout);
     NullSystem system;
     EmulatorConfigurator configurator(fs, layout);
+    PlaylistManager playlists(fs, layout);
+    ThumbnailManager thumbnails(fs, layout, *client);
     CheatManager cheats(fs, layout, *client);
     DownloadService downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     downloads.addPostInstallStep(configurator);
+    downloads.addPostInstallStep(playlists);
+    downloads.addPostInstallStep(thumbnails);
     downloads.addPostInstallStep(cheats);
     std::optional<DownloadFinished> finished;
     auto subscription = bus.subscribe<DownloadFinished>([&](const DownloadFinished& e) { finished = e; });
@@ -226,7 +241,7 @@ TEST_F(FtpDownload, DsGameEndToEndConfiguresRetroArchAndInstallsItsCheat) {
 
     ASSERT_TRUE(finished.has_value());
     ASSERT_TRUE(finished->result.ok()) << finished->result.error().describe();
-    ASSERT_EQ(finished->steps.size(), 2u);
+    ASSERT_EQ(finished->steps.size(), 4u);
     for (const StepOutcome& step : finished->steps) EXPECT_TRUE(step.result.ok()) << step.id << ": " << step.result.error().describe();
 
     EXPECT_EQ(fs.readFile("/roms/nds/Test DS Game (Europe).nds").value(), "MOCK ROM nds\n");
@@ -235,7 +250,59 @@ TEST_F(FtpDownload, DsGameEndToEndConfiguresRetroArchAndInstallsItsCheat) {
     auto cht = fs.readFile("/retroarch/cheats/Nintendo - Nintendo DS/Test DS Game (Europe).cht");
     ASSERT_TRUE(cht.ok()) << cht.error().describe();
     EXPECT_EQ(CfgDocument::parse(cht.value()).get("cheat1_desc"), "Max Money");
+
+    auto lpl = fs.readFile("/retroarch/playlists/Nintendo - Nintendo DS.lpl");
+    ASSERT_TRUE(lpl.ok()) << lpl.error().describe();
+    auto items = PlaylistDocument::parse(lpl.value()).value().items();
+    ASSERT_EQ(items.size(), 1u);
+    EXPECT_EQ(items[0].path, "/roms/nds/Test DS Game (Europe).nds");
+    EXPECT_EQ(items[0].label, "Test DS Game (Europe)");
+    EXPECT_EQ(items[0].crc32, PlaylistDocument::crcField(Crc32Hex("MOCK ROM nds\n")));
+
+    auto png = fs.readFile("/retroarch/thumbnails/Nintendo - Nintendo DS/Named_Boxarts/Test DS Game (Europe).png");
+    ASSERT_TRUE(png.ok()) << png.error().describe();
+    EXPECT_TRUE(ThumbnailManager::validate(png.value()).ok());
     // No staging file anywhere.
+    for (auto& entry : std::filesystem::recursive_directory_iterator(sd.path())) {
+        EXPECT_FALSE(isStagingName(entry.path().filename().string())) << entry.path();
+    }
+}
+
+TEST_F(FtpDownload, BiosFilesOfferedByTheShopAreCheckedAndInstalled) {
+    LocalFileSystem fs(sd.path());
+    ASSERT_TRUE(test::copyHostTree(test::fixtureSdCardDir(), fs).ok());
+    ImmediateTaskRunner tasks;
+    auto index = ShopService(*client, tasks).loadIndex();
+    ASSERT_TRUE(index.ok()) << index.error().describe();
+    ASSERT_EQ(index.value().bios.size(), 3u);
+
+    EventBus bus(tasks);
+    BiosManager bios(fs, SdLayout{}, *client, bus, std::make_unique<ImmediateTaskRunner>());
+    auto before = bios.check(index.value().bios);
+    auto rowFor = [](const std::vector<BiosStatus>& rows, const std::string& name) {
+        return *std::find_if(rows.begin(), rows.end(), [&](const BiosStatus& r) { return r.fileName == name; });
+    };
+    EXPECT_EQ(rowFor(before, "scph5501.bin").state, BiosState::Missing);
+    ASSERT_TRUE(rowFor(before, "scph5501.bin").offer.has_value());
+
+    std::vector<BiosInstalled> installed;
+    auto sub = bus.subscribe<BiosInstalled>([&](const BiosInstalled& e) { installed.push_back(e); });
+    ASSERT_TRUE(bios.startInstall({*rowFor(before, "scph5501.bin").offer, *rowFor(before, "scph5502.bin").offer}));
+    ASSERT_EQ(installed.size(), 2u);
+    for (const BiosInstalled& e : installed) EXPECT_TRUE(e.result.ok()) << e.fileName << ": " << e.result.error().describe();
+
+    // Fixture files are fakes: present, but not the dumps the catalogue knows.
+    auto after = bios.check(index.value().bios);
+    EXPECT_EQ(rowFor(after, "scph5501.bin").state, BiosState::Unrecognized);
+    EXPECT_EQ(fs.readFile("/retroarch/system/scph5501.bin").value(), "FAKE PS1 BIOS (USA) - test fixture\n");
+
+    // An MD5 that does not match what the server sends: nothing installed.
+    BiosEntry wrong = *rowFor(before, "scph5502.bin").offer;
+    wrong.fileName = "scph5500.bin";
+    wrong.md5 = "00000000000000000000000000000000";
+    CancellationToken cancel;
+    EXPECT_EQ(bios.installNow(wrong, cancel).error().code, ErrorCode::IntegrityError);
+    EXPECT_FALSE(fs.exists("/retroarch/system/scph5500.bin"));
     for (auto& entry : std::filesystem::recursive_directory_iterator(sd.path())) {
         EXPECT_FALSE(isStagingName(entry.path().filename().string())) << entry.path();
     }

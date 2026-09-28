@@ -29,7 +29,7 @@ struct ShopConfig {
 struct SysClkSettings {
     bool enabled = true;
     // Title id sys-clk sees while RetroArch runs (see docs/CONFIG.md).
-    std::string titleId = "05B9D58000000000";
+    std::string titleId = "010000000000100D";  // Album applet: RetroArch .nro run from hbmenu
 
     bool operator==(const SysClkSettings& o) const { return enabled == o.enabled && titleId == o.titleId; }
 };

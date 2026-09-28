@@ -9,23 +9,25 @@
 
 namespace rm {
 
-// After installing a game for a demanding system (N64, PlayStation, 3DS),
+// After installing a game for a demanding system (N64, PlayStation),
 // makes sys-clk run the CPU at full speed while RetroArch is in front:
 // [<RetroArch title id>] handheld_cpu=1785 / docked_cpu=1785 in
 // /config/sys-clk/config.ini, edited with IniDocument (the rest of the file
 // is left untouched).
 //
-// sys-clk applies profiles per *title id of the running program*: the id to
-// use depends on how RetroArch is launched (installed forwarder, or the
-// .nro from the Album / a hijacked game). It is therefore configurable in
-// config.json ("sysclk.title_id").
+// sys-clk applies profiles per *title id of the running program*. RetroArch
+// is a .nro started from hbmenu, which runs inside the Album applet
+// (010000000000100D): that is the default. A forwarder or a hijacked game
+// has another id, hence "sysclk.title_id" in config.json.
+//
+// 3DS is not in the list: it runs in Citra (standalone), not RetroArch.
 class SysClkConfigurator : public IPostInstallStep {
   public:
-    static constexpr const char* kDefaultTitleId = "05B9D58000000000";
+    static constexpr const char* kDefaultTitleId = "010000000000100D";  // Album applet
     static constexpr const char* kMaxCpuMhz = "1785";  // highest stock CPU clock
 
     SysClkConfigurator(IFileSystem& fs, SdLayout layout, std::string titleId = kDefaultTitleId,
-                       std::set<std::string> systems = {"n64", "psx", "3ds"});
+                       std::set<std::string> systems = {"n64", "psx"});
 
     std::string id() const override { return "sysclk"; }
 

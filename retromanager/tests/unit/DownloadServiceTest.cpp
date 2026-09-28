@@ -46,10 +46,12 @@ class FakeStep : public IPostInstallStep {
     std::optional<Status> run(const GameEntry& game, const std::string& romPath, const CancellationToken&) override {
         ranFor.push_back(game.id);
         paths.push_back(romPath);
+        crcs.push_back(game.crc32);
         return outcome_;
     }
     std::vector<std::string> ranFor;
     std::vector<std::string> paths;
+    std::vector<std::string> crcs;
 
   private:
     std::string id_;
@@ -438,4 +440,15 @@ TEST(DownloadService, StepsDoNotRunWhenTheInstallFails) {
     EXPECT_TRUE(step.ranFor.empty());
     EXPECT_TRUE(f.finished.at(0).steps.empty());
     EXPECT_EQ(std::count(f.order.begin(), f.order.end(), "configuring"), 0);
+}
+
+TEST(DownloadService, StepsSeeTheCrcMeasuredDuringTheDownload) {
+    Fixture f;
+    f.source.addFile(kUrl, "123456789");  // CRC-32 check value: cbf43926
+    FakeStep playlist("playlist", success());
+    f.downloads.addPostInstallStep(playlist);
+
+    f.downloads.start(game(9));  // the index announced no CRC
+
+    EXPECT_EQ(playlist.crcs, (std::vector<std::string>{"cbf43926"}));
 }

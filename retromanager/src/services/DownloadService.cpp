@@ -97,6 +97,9 @@ void DownloadService::run(DownloadId id, const GameEntry& game, const std::share
     latest.received = install.value()->bytesWritten();
     publishProgress(latest);  // always end on the final numbers
     Status committed = install.value()->commit();
+    // Steps see the CRC actually measured (playlists), even when the index had none.
+    GameEntry installed = game;
+    installed.crc32 = install.value()->crc32();
     install.value().reset();
     if (!committed) return finish(id, game, committed, destination);
 
@@ -104,7 +107,7 @@ void DownloadService::run(DownloadId id, const GameEntry& game, const std::share
     bus_.publish(DownloadConfiguring{id});
     std::vector<StepOutcome> outcomes;
     for (IPostInstallStep* step : steps_) {
-        if (std::optional<Status> outcome = step->run(game, destination, *token)) {
+        if (std::optional<Status> outcome = step->run(installed, destination, *token)) {
             outcomes.push_back(StepOutcome{step->id(), std::move(*outcome)});
         }
     }
