@@ -31,41 +31,49 @@ contredit, on modifie d'abord ce document.
 ```mermaid
 graph TD
     UI["ui/ : Activities & vues Borealis"]
-    SVC["services/ : RomManager, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
-    PARSE["parsers/ : CfgParser, IniParser, RepoIndexParser, ChtParser"]
+    SVC["services/ : ShopService ✅, RomManager, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
+    PARSE["parsers/ : RepoIndexParser ✅, CfgParser, IniParser, ChtParser"]
     FS["fs/ : RomStore, SaveStore, BiosStore"]
-    NET["network/ : IRemoteSource, FtpClient, SmbClient, HttpClient"]
+    NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SmbClient, HttpClient"]
     PLAT["platform/ : IFileSystem, VirtualPath, SdLayout, Platform"]
-    CORE["core/ : Result, AppContext"]
+    CORE["core/ : Result, AppContext, ITaskRunner, Url, Format"]
+    MODELS["models/ : GameEntry, RepoIndex, Systems"]
 
     UI --> SVC
+    UI --> MODELS
+    SVC --> MODELS
+    PARSE --> MODELS
     SVC --> PARSE
     SVC --> FS
     SVC --> NET
     FS --> PLAT
-    NET --> PLAT
+    NET --> CORE
     PARSE --> CORE
+    MODELS --> CORE
     PLAT --> CORE
 ```
 
 | Couche | Rôle | Peut dépendre de | Ne doit **jamais** |
 |---|---|---|---|
-| `core/` | Types de base (`Result`, `Status`), composition (`AppContext`) | STL | inclure Borealis ou libnx |
+| `core/` | Types de base (`Result`, `Status`), composition (`AppContext`), `ITaskRunner`, utilitaires purs (`Url`, `Format`) | STL | inclure Borealis ou libnx |
+| `models/` | Données pures partagées par toutes les couches (`GameEntry`, `RepoIndex`, `SystemSection`) et catalogue des systèmes | `core` | contenir du comportement autre que des accesseurs |
 | `platform/` | Abstractions système + implémentations par plateforme | `core` | contenir de la logique métier |
 | `parsers/` | Fonctions **pures** texte ⇄ structures (`.cfg`, `.ini`, JSON, `.cht`) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
 | `fs/` | Opérations SD typées (ranger une ROM, retrouver une save…) | `platform`, `core` | parler au réseau |
-| `network/` | Accès distants derrière `IRemoteSource` | `platform`, `core` | écrire sur la SD directement (il fournit des flux) |
+| `network/` | Déplace des octets derrière `IRemoteSource` | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD (il fournira des flux) |
 | `services/` | Cas d'usage : orchestrent parsers, fs et network | tout ce qui précède | inclure Borealis |
-| `ui/` | Affichage et navigation Borealis | `services`, `core` | toucher à `IFileSystem` ou au réseau directement |
+| `ui/` | Affichage et navigation Borealis | `services`, `models`, `core` | appeler un parser, un `IRemoteSource` ou `IFileSystem` directement |
 
-> Exception assumée en Phase 1 : `HomeActivity` lit `AppContext` directement,
-> faute de service à interroger. Elle passera par un service dès la Phase 2.
+> Exception assumée : `HomeActivity` lit encore `AppContext` directement (plateforme,
+> détection de RetroArch). Elle passera par un service système quand celui-ci
+> existera (Phase configurateur).
 
 ### Cibles CMake
 
 | Cible | Contenu | Plateformes |
 |---|---|---|
-| `retromanager_core` | `src/core`, `src/platform/common` (puis parsers, fs, network, services) | toutes : c'est ce qu'on teste |
+| `retromanager_core` | `src/core`, `src/models`, `src/parsers`, `src/services`, `src/platform/common`, `MockRemoteSource` | toutes : c'est ce qu'on teste |
+| `retromanager_curl` | `FtpClient` (libcurl). Option `RM_WITH_CURL`, activée par défaut | toutes |
 | `RetroManager` | `src/main.cpp`, `src/ui`, **une seule** implémentation de `src/platform/{switch,desktop}` + Borealis | desktop, Switch (`.nro`) |
 | `retromanager_mocks` | `tests/mocks` : `MemoryFileSystem`, chargeur de fausse SD | desktop (tests) |
 | `retromanager_tests` | `tests/unit`, `tests/integration` (GoogleTest) | desktop |
@@ -141,7 +149,32 @@ Les services reçoivent des références aux interfaces dont ils ont besoin. Un
 test construit exactement le même graphe autour d'un `MemoryFileSystem` et
 d'un faux `IRemoteSource`.
 
-### 4.2 Exemple de flux (Phase 2+) : télécharger une ROM
+### 4.2 Flux implémenté (Phase 2) : afficher la boutique
+
+```mermaid
+sequenceDiagram
+    participant UI as GamesListActivity (ui)
+    participant S as ShopService (services)
+    participant T as ITaskRunner
+    participant R as IRemoteSource (network)
+    participant P as RepoIndexParser (parsers)
+    UI->>S: loadIndexAsync(callback)          [thread UI]
+    S->>T: runInBackground
+    T->>S: (tâche de fond)
+    S->>R: fetchIndex()  → octets bruts
+    S->>P: parse(document, indexUrl)  → RepoIndex
+    S->>T: runOnMainThread
+    T->>UI: callback(Result<RepoIndex>)
+    UI->>S: groupBySystem(games)  → sections affichées
+```
+
+L'UI ne connaît que `ShopService` et les modèles. `main.cpp` choisit la
+source (aujourd'hui `MockRemoteSource`, demain `FtpClient` selon
+`config.json`) : changer de source ne touche ni l'UI ni le service.
+
+Format de l'index : [docs/INDEX_FORMAT.md](docs/INDEX_FORMAT.md).
+
+### 4.3 Exemple de flux (Phase 3) : télécharger une ROM
 
 ```mermaid
 sequenceDiagram
@@ -161,22 +194,29 @@ sequenceDiagram
     S-->>UI: Result (succès / erreur typée)
 ```
 
-### 4.3 Asynchronisme (introduit en Phase 2)
+### 4.4 Asynchronisme
 
-- Les opérations longues (réseau, copie, scraping) s'exécutent via une
-  interface `ITaskRunner`, implémentée par le pool de threads de Borealis dans
-  l'app et par un exécuteur synchrone dans les tests (déterministe).
-- Les services signalent progression et fin par des callbacks. **Seule la
-  couche UI** les repasse sur le thread principal (`brls::sync`) : les
-  services ignorent tout de Borealis.
+- Les opérations longues (réseau, copie, scraping) passent par `ITaskRunner`
+  (`core/ITaskRunner.hpp`) : `ui::BorealisTaskRunner` (`brls::async` /
+  `brls::sync`) dans l'app, `ImmediateTaskRunner` ou une file manuelle dans
+  les tests, qui restent donc synchrones et déterministes.
+- Les services livrent leurs résultats par callback **sur le thread
+  principal**. Ils ignorent tout de Borealis : c'est l'implémentation
+  d'`ITaskRunner` fournie par l'UI qui fait le saut de thread.
+- Une activité fermée avant la fin d'un chargement ne doit pas être touchée
+  par le callback : `GamesListActivity` garde un drapeau de vie
+  (`shared_ptr<bool>`), vérifié sur le thread principal.
+- `Application::exit()` de Borealis attend la fin du thread de tâches : les
+  services créés dans `main()` survivent donc à toute tâche en cours.
 - Pas de bus d'événements global tant qu'un besoin réel n'apparaît pas
   (synchronisation cloud en arrière-plan, par exemple).
 
-### 4.4 Gestion des erreurs
+### 4.5 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
-message ; l'UI traduit `ErrorCode` en message localisé (i18n). Aucune
-exception ne traverse une frontière de couche.
+message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
+authentification, index introuvable, format invalide). Aucune exception ne
+traverse une frontière de couche (le parser attrape celles de nlohmann/json).
 
 ---
 
@@ -186,8 +226,10 @@ exception ne traverse une frontière de couche.
    `.cfg`, synchronisation, parsing des listings FTP).
 2. **Unitaires** (`tests/unit`) : `MemoryFileSystem` et fakes, rapides.
 3. **Contrat** : une suite par interface, exécutée sur chaque implémentation.
-4. **Intégration** (`tests/integration`) : scénarios de bout en bout sur la
-   fausse SD (et, plus tard, un serveur FTP local).
+4. **Intégration** (`tests/integration`) : `FtpClient` contre un vrai serveur
+   FTP local (`tools/test_ftp_server.py`, pyftpdlib) servant
+   `tests/fixtures/ftp_root`. Ces tests sont ignorés (`SKIPPED`) si
+   `RM_TEST_FTP_PORT` n'est pas défini.
 5. **CI** (`.github/workflows/retromanager.yml`) : tests sous ASan et UBSan,
    build desktop, build Switch `.nro` dans le conteneur `devkitpro/devkita64`.
 
@@ -198,13 +240,14 @@ exception ne traverse une frontière de couche.
 ```
 retromanager/
 ├── CMakeLists.txt, CMakePresets.json   # presets tests / desktop / switch
-├── cmake/                              # FetchBorealis (avant project()), Dependencies
+├── cmake/                              # FetchBorealis (avant project()), Dependencies, Curl
+├── docs/                               # INDEX_FORMAT.md, captures
 ├── include/retromanager/<couche>/      # en-têtes publics, un dossier par couche
 ├── src/<couche>/                       # implémentations (même découpage)
 │   └── platform/{common,switch,desktop}
 ├── resources/                          # XML Borealis, i18n (en-US, fr), images
-├── tests/{mocks,unit,integration,fixtures/sd_card}
-└── tools/make_mock_sd.py
+├── tests/{mocks,unit,integration,fixtures/{sd_card,ftp_root}}
+└── tools/{make_mock_sd.py,test_ftp_server.py}
 ```
 
 Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
@@ -217,5 +260,6 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | Phase | Contenu | Statut |
 |---|---|---|
 | 0–1 | Squelette, `IFileSystem` avec mocks, fausse SD, écran d'accueil, CI | ✅ |
-| 2 | À définir : parsers `retroarch.cfg` / sys-clk + `EmulatorConfigurator`, ou dépôts JSON + `IRemoteSource` | — |
-| 3+ | Réseau FTP/SMB, gestionnaire de ROMs, scraping, cheats, cloud saves, forwarders | — |
+| 2 | Boutique : `GameEntry`, `RepoIndexParser`, `IRemoteSource` (mock + FTP), `ShopService`, liste Borealis | ✅ |
+| 3 | Téléchargement : `IRemoteSource::openRead` en flux, `RomStore`, écriture atomique sur la SD, progression | — |
+| 4+ | Configuration des sources (`config.json`), SMB/HTTP, scraping, configurateur RetroArch, cheats, cloud saves, forwarders | — |
