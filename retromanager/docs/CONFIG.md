@@ -32,11 +32,32 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 }
 ```
 
-Les sources se gèrent aussi depuis l'écran **Sources** de l'accueil (X : un
-formulaire Nom / URL de l'index / Utilisateur / Mot de passe, chaque valeur
-restant affichée en entier ; choix de la source active ; suppression) : chaque
-changement est appliqué tout de suite et réécrit ce fichier. La version
-remplacée est gardée dans `config.json.bak`.
+Les sources se gèrent aussi depuis l'écran **Sources** de l'accueil. Chaque
+source a ses boutons (Gauche / Droite) : **Utiliser**, **Modifier** (aussi Y :
+le formulaire s'ouvre pré-rempli et l'entrée existante est mise à jour, à la
+même place), **Tester** (télécharge l'index et affiche le résultat, ou la
+raison exacte de l'échec), **Supprimer** (avec confirmation). « + Ajouter une
+source » (aussi X) ouvre le formulaire Nom / URL de l'index / Utilisateur /
+Mot de passe, chaque valeur restant affichée en entier. Chaque changement est
+appliqué tout de suite et réécrit ce fichier ; la version remplacée est gardée
+dans `config.json.bak`.
+
+![Test d'une source : la raison exacte de l'échec (build desktop)](source-test-desktop.png)
+
+## Diagnostiquer un problème réseau
+
+- Les erreurs réseau donnent le **code cURL** et son nom, suivis de la
+  réponse du serveur, par exemple `cURL error 67 (Login denied): Access
+  denied: 530` (mauvais identifiants), `cURL error 7 (Could not connect to
+  server)` (hôte ou port injoignable), `cURL error 6 (Could not resolve
+  hostname)` (nom inconnu), ou `HTTP 404: not found`. Elles apparaissent dans
+  le bouton **Tester** de l'écran Sources, sous l'erreur de la boutique, et
+  dans le détail d'un téléchargement échoué (écran Téléchargements).
+- Tout est aussi écrit dans `/switch/RetroManager/logs/retromanager.log`
+  (la session précédente : `retromanager.old.log`), lisible sur un PC.
+- **Espaces** : une URL peut contenir des espaces bruts (`ftp://nas/roms ds/`),
+  ils sont encodés (`%20`) avant d'être passés à libcurl ; une URL déjà
+  encodée n'est pas modifiée.
 
 ![Formulaire d'ajout d'une source (build desktop)](source-form-desktop.png) L'ancien format
 à une seule boutique (`"shop": {...}`) est toujours lu : il devient la source

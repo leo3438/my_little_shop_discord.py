@@ -66,7 +66,8 @@
         "step_icon_ok": "Icon installed in {}.",
         "step_icon_missing": "Icon not found on the server.",
         "step_icon_failed": "Cannot install the icon ({}).",
-        "step_record_failed": "Installed version not recorded ({})."
+        "step_record_failed": "Installed version not recorded ({}).",
+        "technical": "Technical detail: {}"
     },
     "sync": {
         "title": "Cloud saves",
@@ -151,7 +152,7 @@
     },
     "sources": {
         "title": "Sources",
-        "hint": "A: use or delete  ·  X: add a source  ·  or write them in /switch/RetroManager/config.json",
+        "hint": "Left / Right: a source's actions  ·  Y: edit  ·  X: add  ·  sources can also be written in /switch/RetroManager/config.json",
         "active": "active",
         "empty": "No source: add one with X.",
         "add": "Add a source",
@@ -184,7 +185,17 @@
         "missing_name": "Give the source a name.",
         "missing_url": "Type the index URL.",
         "config_warnings": "config.json: some entries were ignored (config.json.bak keeps your version):",
-        "config_invalid": "config.json cannot be read: {}\nFix the file on the SD card, then restart RetroManager."
+        "config_invalid": "config.json cannot be read: {}\nFix the file on the SD card, then restart RetroManager.",
+        "add_button": "+ Add a source",
+        "edit": "Edit",
+        "test": "Test",
+        "form_title_edit": "Edit the source",
+        "updated": "Source updated: {}",
+        "confirm_delete": "Delete the source \"{}\"?\n(config.json is updated)",
+        "testing": "Testing \"{}\"...",
+        "test_ok": "\"{}\": connection OK.\n{} games and {} applications in the index ({}).",
+        "test_failed": "\"{}\": connection failed.\n\n{}",
+        "test_bad_index": "\"{}\" answers, but its index is invalid:\n\n{}"
     },
     "forwarder": {
         "title": "HOME shortcut",

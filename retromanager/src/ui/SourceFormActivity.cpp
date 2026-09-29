@@ -27,17 +27,21 @@ FormField::FormField(std::string label, std::string placeholder, std::string hin
       hint_(std::move(hint)),
       maxLength_(maxLength),
       secret_(secret) {
-    setAxis(brls::Axis::COLUMN);
+    setAxis(brls::Axis::ROW);
     setFocusable(true);
     setPadding(14, 16, 14, 16);
     setMarginBottom(10);
     setCornerRadius(6);
     setBackgroundColor(brls::Application::getTheme().getColor("brls/backdrop"));
 
+    auto* column = new brls::Box(brls::Axis::COLUMN);  // not focusable: only for layout
+    column->setGrow(1.0f);
+    addView(column);
+
     auto* title = new brls::Label();
     title->setText(label_);
     title->setFontSize(20);
-    addView(title);
+    column->addView(title);
 
     valueLabel_ = new brls::Label();
     valueLabel_->setFontSize(22);
@@ -46,7 +50,7 @@ FormField::FormField(std::string label, std::string placeholder, std::string hin
     valueLabel_->setWidthPercentage(100);
     valueLabel_->setSingleLine(false);
     valueLabel_->setAutoAnimate(false);
-    addView(valueLabel_);
+    column->addView(valueLabel_);
 
     if (!hint_.empty()) {
         auto* help = new brls::Label();
@@ -54,7 +58,7 @@ FormField::FormField(std::string label, std::string placeholder, std::string hin
         help->setFontSize(15);
         help->setMarginTop(6);
         help->setTextColor(brls::Application::getTheme().getColor("brls/text_disabled"));
-        addView(help);
+        column->addView(help);
     }
     refresh();
     registerClickAction([this](brls::View*) {
@@ -95,8 +99,9 @@ void FormField::refresh() {
 
 // --- SourceFormActivity -------------------------------------------------------
 
-SourceFormActivity::SourceFormActivity(SourceCatalog& catalog, std::function<void(const std::string&)> onAdded)
-    : catalog_(catalog), onAdded_(std::move(onAdded)) {}
+SourceFormActivity::SourceFormActivity(SourceCatalog& catalog, std::function<void(const std::string&)> onSaved,
+                                       std::optional<ShopConfig> existing)
+    : catalog_(catalog), onSaved_(std::move(onSaved)), existing_(std::move(existing)) {}
 
 void SourceFormActivity::onContentAvailable() {
     name_ = new FormField(brls::getStr("retromanager/sources/field_name"), brls::getStr("retromanager/sources/placeholder_name"),
@@ -107,6 +112,15 @@ void SourceFormActivity::onContentAvailable() {
                           "", 64);
     password_ = new FormField(brls::getStr("retromanager/sources/field_password"),
                               brls::getStr("retromanager/sources/placeholder_password"), "", 128, true);
+    if (existing_) {
+        if (auto* frame = dynamic_cast<brls::AppletFrame*>(getContentView())) {
+            frame->setTitle(brls::getStr("retromanager/sources/form_title_edit"));
+        }
+        name_->setValue(existing_->name);
+        url_->setValue(existing_->url);
+        user_->setValue(existing_->username);
+        password_->setValue(existing_->password);
+    }
     // Above the type line, the error line and the buttons.
     std::size_t at = 0;
     for (FormField* field : {name_, url_, user_, password_}) {
@@ -157,21 +171,25 @@ void SourceFormActivity::save() {
         brls::Application::giveFocus(url_);
         return;
     }
-    ShopConfig draft;
-    draft.type.clear();  // deduced from the address
+    ShopConfig draft = existing_ ? *existing_ : ShopConfig{};
     draft.name = name_->value();
     draft.url = url_->value();
     draft.username = user_->value();
     draft.password = password_->value();
-    Status added = catalog_.add(draft);
-    if (!added) {
-        brls::Logger::error("Sources: {}", added.error().describe());
-        showError(brls::getStr("retromanager/sources/error", added.error().message));
+    // Deduced from the address, unless editing a source whose URL keeps the
+    // same kind (its own verifyTls choice is then kept) or the demo shop.
+    const bool sameKind = existing_ && (existing_->type == "mock" || SourceCatalog::typeForUrl(draft.url) == existing_->type);
+    if (!sameKind) draft.type.clear();
+    Status saved = existing_ ? catalog_.update(existing_->name, draft) : catalog_.add(draft);
+    if (!saved) {
+        brls::Logger::error("Sources: {}", saved.error().describe());
+        showError(brls::getStr("retromanager/sources/error", saved.error().message));
         return;
     }
-    brls::Logger::info("Sources: added {} ({})", draft.name, draft.url);
-    std::string name = catalog_.config().sources.back().name;
-    auto done = onAdded_;
+    brls::Logger::info("Sources: {} {} ({})", existing_ ? "updated" : "added", draft.name, draft.url);
+    std::string name = draft.name.substr(draft.name.find_first_not_of(" \t"));
+    name = name.substr(0, name.find_last_not_of(" \t") + 1);
+    auto done = onSaved_;
     brls::sync([done, name] {
         brls::Application::popActivity(brls::TransitionAnimation::FADE, [done, name] {
             if (done) done(name);

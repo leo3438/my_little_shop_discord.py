@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "retromanager/models/AppConfig.hpp"
@@ -13,6 +14,11 @@ namespace rm::ui {
 // (wrapped, never cut) or a grey placeholder when empty, then a hint. A
 // opens the console keyboard with the label as header and the current value
 // already typed, so the user always sees what they enter.
+//
+// Focus: the field is a ROW box (like Borealis' own cells) holding a
+// non-focusable column of labels. Borealis asks the focused view itself for
+// the next focus; a focusable COLUMN box would first walk its own children
+// with its index in the parent, which made D-pad navigation erratic.
 class FormField : public brls::Box {
   public:
     FormField(std::string label, std::string placeholder, std::string hint, int maxLength, bool secret = false);
@@ -33,12 +39,15 @@ class FormField : public brls::Box {
     brls::Label* valueLabel_;
 };
 
-// "Add a source" form: Name, index URL, user name, password, the type
-// deduced from the URL, Save / Cancel. Validation errors show in the form,
-// which stays open with what was typed.
+// "Add a source" / "Edit a source" form: Name, index URL, user name,
+// password, the type deduced from the URL, Save / Cancel. Validation errors
+// show in the form, which stays open with what was typed. Editing replaces
+// the existing entry of config.json (same place, still active if it was).
 class SourceFormActivity : public brls::Activity {
   public:
-    SourceFormActivity(SourceCatalog& catalog, std::function<void(const std::string& name)> onAdded);
+    // `existing`: the source to edit (fields pre-filled); nullopt to add one.
+    SourceFormActivity(SourceCatalog& catalog, std::function<void(const std::string& name)> onSaved,
+                       std::optional<ShopConfig> existing = std::nullopt);
 
     CONTENT_FROM_XML_RES("activity/source_form.xml");
 
@@ -50,7 +59,8 @@ class SourceFormActivity : public brls::Activity {
     void showError(const std::string& text);
 
     SourceCatalog& catalog_;
-    std::function<void(const std::string&)> onAdded_;
+    std::function<void(const std::string&)> onSaved_;
+    std::optional<ShopConfig> existing_;
     FormField* name_ = nullptr;
     FormField* url_ = nullptr;
     FormField* user_ = nullptr;

@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -11,6 +12,7 @@
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/network/SourceRouter.hpp"
+#include "retromanager/platform/LocalFileSystem.hpp"
 #include "retromanager/platform/Platform.hpp"
 #include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
@@ -126,6 +128,23 @@ RemoteSources createRemoteSources(rm::AppContext& context) {
     return sources;
 }
 
+// Borealis' log goes to /switch/RetroManager/logs/retromanager.log: on the
+// console there is no terminal, and the real reason of a failure (the cURL
+// code, the server's answer) must be readable afterwards. Previous run kept
+// as retromanager.old.log. RETROMANAGER_LOG_STDOUT=1 keeps the terminal
+// (desktop development).
+std::FILE* openLogFile(rm::IFileSystem& fs, const rm::SdLayout& layout) {
+    const char* toStdout = std::getenv("RETROMANAGER_LOG_STDOUT");
+    if (toStdout != nullptr && std::strcmp(toStdout, "1") == 0) return nullptr;
+    auto* local = dynamic_cast<rm::LocalFileSystem*>(&fs);
+    if (local == nullptr || !fs.createDirectories(layout.logsDir)) return nullptr;
+    const std::string log = layout.logsDir + "/retromanager.log";
+    if (fs.exists(log)) (void)fs.rename(log, layout.logsDir + "/retromanager.old.log");
+    // The logger needs a FILE*: the one place that opens a file directly.
+    std::filesystem::path host = local->root() / std::filesystem::path(log).relative_path();
+    return std::fopen(host.string().c_str(), "w");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -139,6 +158,13 @@ int main(int argc, char* argv[]) {
     rm::PlatformServices platform = rm::createPlatformServices();
     rm::AppContext context(platform.fileSystem, rm::SdLayout{}, platform.name, platform.sdRootLabel);
     rm::Status initStatus = context.initialize();
+    std::FILE* logFile = openLogFile(context.fileSystem(), context.layout());
+    if (logFile != nullptr) {
+        std::setvbuf(logFile, nullptr, _IOLBF, 0);  // line by line: nothing lost if the app crashes
+        brls::Logger::setLogOutput(logFile);
+        brls::Logger::setThreadSafeLogging(true);  // workers, brls::async and the UI all log
+    }
+    brls::Logger::info("RetroManager {} on {}", RM_VERSION, platform.name);
     if (!initStatus) brls::Logger::error("RetroManager init failed: {}", initStatus.error().describe());
 
     // The console language on Switch. On desktop, Borealis only maps a few

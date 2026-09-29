@@ -28,6 +28,11 @@ class SourceCatalog {
     // or the type's default when `type` was empty.
     // Name, URL and user name are trimmed first (console keyboard input).
     Status add(ShopConfig source);
+    // Replaces the source named `name` (ignoring case) in place: same
+    // position, still active if it was (under its new name), saved; the
+    // same checks as add(). `type` empty = from the URL (verifyTls then
+    // takes the type's default).
+    Status update(const std::string& name, ShopConfig source);
     Status remove(const std::string& name);
     Status activate(const std::string& name);
 
@@ -39,6 +44,8 @@ class SourceCatalog {
 
   private:
     Status save();
+    // Trims and validates `source`; `replacing` is the name it may keep.
+    Status prepare(ShopConfig& source, const std::string& replacing) const;
 
     AppConfig& config_;
     SourceRouter& router_;

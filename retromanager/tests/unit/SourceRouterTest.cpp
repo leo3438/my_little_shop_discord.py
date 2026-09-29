@@ -99,3 +99,19 @@ TEST(SourceRouter, NamesAreUnique) {
     EXPECT_FALSE(f.router.add("nas", "ftp", mock("ftp://other/", "x")));
     EXPECT_EQ(f.router.sources().size(), 2u);
 }
+
+TEST(SourceRouter, ReplaceKeepsThePlaceAndTheActiveMark) {
+    Fixture f;
+    ASSERT_TRUE(f.router.setActive("NAS"));
+    auto renamed = mock("ftp://nas2.local/shop/index.json", "NAS 2");
+    EXPECT_TRUE(f.router.replace("nas", "Salon", "ftp", renamed));
+    auto list = f.router.sources();
+    ASSERT_EQ(list.size(), 2u);
+    EXPECT_EQ(list[0].name, "Salon");  // same position
+    EXPECT_TRUE(list[0].active);       // still the active one, under its new name
+    EXPECT_EQ(f.router.activeName(), "Salon");
+    EXPECT_EQ(f.router.sourceNamed("salon"), renamed);
+    EXPECT_EQ(f.router.sourceNamed("NAS"), nullptr);
+    EXPECT_FALSE(f.router.replace("missing", "X", "ftp", renamed));
+    EXPECT_FALSE(f.router.replace("Salon", "web", "ftp", renamed));  // name taken by another source
+}

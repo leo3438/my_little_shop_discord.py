@@ -37,18 +37,19 @@ std::string SourceCatalog::typeForUrl(const std::string& url) {
     return "";
 }
 
-Status SourceCatalog::add(ShopConfig source) {
+Status SourceCatalog::prepare(ShopConfig& source, const std::string& replacing) const {
     source.name = trim(source.name);
     source.url = trim(source.url);
     source.username = trim(source.username);
     if (!writable_) return makeError(ErrorCode::PermissionDenied, "config.json is invalid: fix it first");
     if (source.name.empty()) return makeError(ErrorCode::InvalidArgument, "a source needs a name");
     for (const ShopConfig& other : config_.sources) {
-        if (lower(other.name) == lower(source.name)) {
+        if (lower(other.name) == lower(source.name) && lower(other.name) != lower(replacing)) {
             return makeError(ErrorCode::InvalidArgument, "a source is already named \"" + other.name + "\"");
         }
     }
-    auto parts = url::split(source.url);
+    if (source.type == "mock") return success();
+    auto parts = url::split(url::encodeForTransfer(source.url));
     if (!parts) return makeError(ErrorCode::InvalidArgument, "not a URL: " + source.url);
     const std::string scheme = parts.value().scheme;
     if (source.type.empty()) {
@@ -62,10 +63,14 @@ Status SourceCatalog::add(ShopConfig source) {
         if (auto http = httpConfigFromShop(source, config_.caBundle); !http) return http.error();
     } else if (source.type == "ftp") {
         if (auto ftp = ftpConfigFromShop(source); !ftp) return ftp.error();
-    } else if (source.type != "mock") {
+    } else {
         return makeError(ErrorCode::Unsupported, "unknown source type " + source.type);
     }
+    return success();
+}
 
+Status SourceCatalog::add(ShopConfig source) {
+    if (Status ok = prepare(source, ""); !ok) return ok;
     AppConfig before = config_;
     config_.sources.push_back(source);
     if (Status saved = save(); !saved) {
@@ -73,6 +78,26 @@ Status SourceCatalog::add(ShopConfig source) {
         return saved;
     }
     router_.add(source.name, source.type, std::shared_ptr<IRemoteSource>(createRemoteSource(source, config_.caBundle)));
+    return success();
+}
+
+Status SourceCatalog::update(const std::string& name, ShopConfig source) {
+    auto it = std::find_if(config_.sources.begin(), config_.sources.end(),
+                           [&](const ShopConfig& s) { return lower(s.name) == lower(name); });
+    if (it == config_.sources.end()) return makeError(ErrorCode::NotFound, "no source named " + name);
+    const std::string previous = it->name;
+    if (Status ok = prepare(source, previous); !ok) return ok;
+
+    AppConfig before = config_;
+    *it = source;  // same place in the list
+    if (lower(config_.activeSource) == lower(previous)) config_.activeSource = source.name;
+    if (Status saved = save(); !saved) {
+        config_ = before;
+        return saved;
+    }
+    // A new client: transfers already running keep the old one to the end.
+    router_.replace(previous, source.name, source.type,
+                    std::shared_ptr<IRemoteSource>(createRemoteSource(source, config_.caBundle)));
     return success();
 }
 

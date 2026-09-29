@@ -129,7 +129,7 @@ Status HttpClient::transfer(const std::string& target, std::uint64_t offset, con
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
     CURL* handle = curl.get();
     char details[CURL_ERROR_SIZE] = {0};
-    const std::string address = url::stripFragment(target);
+    const std::string address = url::encodeForTransfer(url::stripFragment(target));
     TransferState state{handle, &sink, &progress, &cancel, offset, false, std::nullopt};
 
     curl_easy_setopt(handle, CURLOPT_URL, address.c_str());

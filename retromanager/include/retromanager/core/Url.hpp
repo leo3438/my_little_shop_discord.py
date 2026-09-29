@@ -35,6 +35,12 @@ std::string percentDecode(std::string_view value);
 // Escapes everything but unreserved characters and '/'.
 std::string percentEncodePath(std::string_view path);
 
+// What libcurl accepts: surrounding whitespace trimmed, then spaces, control
+// and non-ASCII bytes and "<>{}|\^` escaped (%20...). Existing %XX escapes
+// and URL syntax (/?#&=:@...) are left untouched, so an already encoded URL
+// comes back unchanged. Folders like "roms ds" then just work.
+std::string encodeForTransfer(std::string_view url);
+
 // Resolves `reference` against `base` (RFC 3986 subset: absolute, "//host",
 // "/absolute-path", "relative/path", with "." and ".." removal).
 // Fails with InvalidArgument for a relative reference without a usable base.

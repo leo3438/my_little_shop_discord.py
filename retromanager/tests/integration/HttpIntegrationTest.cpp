@@ -14,6 +14,7 @@
 #include "retromanager/core/Crc32.hpp"
 #include "retromanager/core/ITaskRunner.hpp"
 #include "retromanager/network/HttpClient.hpp"
+#include "retromanager/network/SourceFactory.hpp"
 #include "retromanager/platform/LocalFileSystem.hpp"
 #include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
@@ -209,4 +210,33 @@ TEST_F(Http, TheScraperFetchesLibretroBoxartsOverHttp) {
     unknown.system = "gba";
     unknown.fileName = "Homebrew Thing.gba";
     EXPECT_FALSE(thumbnails.run(unknown, "/roms/gba/Homebrew Thing.gba", cancel).has_value());
+}
+
+TEST_F(Http, RawSpacesInUrlsAreEncoded) {
+    ShopConfig shop;
+    shop.type = "http";
+    shop.url = base + "/shop ds/index.json";
+    auto config = httpConfigFromShop(shop, "");
+    ASSERT_TRUE(config.ok()) << config.error().describe();
+    HttpClient http(config.value());
+    ImmediateTaskRunner tasks;
+    auto index = ShopService(http, tasks).loadIndex();
+    ASSERT_TRUE(index.ok()) << index.error().describe();
+    ASSERT_EQ(index.value().games.size(), 1u);
+    auto body = get(http, index.value().games[0].romUrl);
+    ASSERT_TRUE(body.ok()) << body.error().describe();
+    EXPECT_EQ(body.value(), "MOCK ROM nds space\n");
+    // Already encoded parts are left alone.
+    auto smw = get(http, base + "/shop/roms/snes/Super%20Mario World%20(USA).sfc");
+    ASSERT_TRUE(smw.ok()) << smw.error().describe();
+}
+
+TEST_F(Http, ErrorsCarryTheCurlCodeOrTheHttpStatus) {
+    HttpClient http = client();
+    auto missing = get(http, base + "/status/404");
+    ASSERT_FALSE(missing.ok());
+    EXPECT_NE(missing.error().message.find("HTTP 404"), std::string::npos) << missing.error().message;
+    auto refused = get(http, "http://127.0.0.1:1/index.json");
+    ASSERT_FALSE(refused.ok());
+    EXPECT_NE(refused.error().message.find("cURL error 7"), std::string::npos) << refused.error().message;
 }

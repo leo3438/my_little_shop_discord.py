@@ -445,7 +445,14 @@ flowchart LR
   reste dans `config.json.bak`). Écran `SourcesActivity` (liste sur deux
   lignes, avertissements de `config.json`) et formulaire `SourceFormActivity`
   (champs libellés `FormField` : valeur affichée en entier, clavier de la
-  console prérempli, erreurs dans le formulaire).
+  console prérempli, erreurs dans le formulaire ; ajout ou modification en
+  place via `SourceCatalog::update`). Focus : seuls des boutons et des
+  `FormField` (boîtes `ROW`) sont focusables ; Borealis demande la suite à la
+  vue focalisée elle-même, et une boîte `COLUMN` focusable parcourait d'abord
+  ses propres enfants.
+- **Erreurs réseau** : `curl::fromCode` → `cURL error <code> (<nom>): <détail
+  du serveur>` ; les URL passent par `url::encodeForTransfer` (espaces,
+  non-ASCII) avant libcurl. Journal : `/switch/RetroManager/logs/retromanager.log`.
 - **`config.json` écrit à la main** : `parseConfig` accepte BOM, commentaires,
   virgules finales, alias de clés, URL seule ; une source incohérente est
   ignorée (jamais complétée par défaut) et décrite dans `AppConfig::warnings`,

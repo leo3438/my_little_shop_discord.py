@@ -83,6 +83,11 @@ std::string outcomeHeadline(const DownloadOutcome& outcome) {
 
 std::string outcomeDetails(const DownloadOutcome& outcome) {
     std::string report;
+    // The technical reason ("cURL error 67 (Login denied): ..."), under the
+    // friendly headline: what to search for or send when asking for help.
+    if (!outcome.result.ok() && outcome.result.error().code != ErrorCode::Cancelled) {
+        report = brls::getStr("retromanager/download/technical", outcome.result.error().message);
+    }
     for (const StepOutcome& step : outcome.steps) {
         if (!report.empty()) report += "\n";
         report += describeStep(step, outcome);

@@ -65,6 +65,28 @@ bool SourceRouter::remove(const std::string& name) {
     return true;
 }
 
+bool SourceRouter::replace(const std::string& name, std::string newName, std::string type,
+                           std::shared_ptr<IRemoteSource> source) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = std::find_if(entries_.begin(), entries_.end(), [&](const Entry& e) { return lower(e.name) == lower(name); });
+    if (it == entries_.end()) return false;
+    for (const Entry& other : entries_) {
+        if (&other != &*it && lower(other.name) == lower(newName)) return false;
+    }
+    const bool wasActive = it->name == active_;
+    *it = Entry{std::move(newName), std::move(type), std::move(source)};  // shared_ptr: a running transfer keeps the old client
+    if (wasActive) active_ = it->name;
+    return true;
+}
+
+std::shared_ptr<IRemoteSource> SourceRouter::sourceNamed(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const Entry& entry : entries_) {
+        if (lower(entry.name) == lower(name)) return entry.source;
+    }
+    return nullptr;
+}
+
 bool SourceRouter::setActive(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const Entry& entry : entries_) {

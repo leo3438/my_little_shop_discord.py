@@ -10,6 +10,7 @@
 
 #include "retromanager/core/ITaskRunner.hpp"
 #include "retromanager/network/FtpClient.hpp"
+#include "retromanager/network/SourceFactory.hpp"
 #include "retromanager/services/ShopService.hpp"
 
 using namespace rm;
@@ -81,4 +82,43 @@ TEST_F(FtpIntegration, OversizedIndexIsRejected) {
     ASSERT_FALSE(result.ok());
     EXPECT_EQ(result.error().code, ErrorCode::IoError);
     EXPECT_NE(result.error().message.find("larger than 16 bytes"), std::string::npos);
+}
+
+// Folders like "roms ds": raw spaces in the source URL and in the index.
+TEST_F(FtpIntegration, RawSpacesInUrlsAreEncoded) {
+    ShopConfig shop;
+    shop.type = "ftp";
+    shop.url = "ftp://127.0.0.1:" + std::to_string(config.port) + "/shop ds/";
+    shop.username = "retro";
+    shop.password = "manager";
+    auto ftp = ftpConfigFromShop(shop);
+    ASSERT_TRUE(ftp.ok()) << ftp.error().describe();
+    FtpClient client(ftp.value());
+    ImmediateTaskRunner tasks;
+    auto index = ShopService(client, tasks).loadIndex();
+    ASSERT_TRUE(index.ok()) << index.error().describe();
+    ASSERT_EQ(index.value().games.size(), 1u);
+    std::string body;
+    CancellationToken cancel;
+    Status got = client.downloadFile(
+        index.value().games[0].romUrl, [&](const char* d, std::size_t n) { body.append(d, n); return success(); },
+        [](const TransferProgress&) {}, cancel);
+    ASSERT_TRUE(got.ok()) << got.error().describe();
+    EXPECT_EQ(body, "MOCK ROM nds space\n");
+}
+
+// The UI shows these messages: they carry curl's code and name.
+TEST_F(FtpIntegration, ErrorsCarryTheCurlCodeAndName) {
+    config.password = "wrong";
+    auto denied = FtpClient(config).fetchIndex();
+    ASSERT_FALSE(denied.ok());
+    EXPECT_NE(denied.error().message.find("cURL error 67"), std::string::npos) << denied.error().message;
+    EXPECT_NE(denied.error().message.find("Login denied"), std::string::npos) << denied.error().message;
+
+    config.port = 1;  // nothing listens there
+    config.connectTimeoutSeconds = 3;
+    auto unreachable = FtpClient(config).fetchIndex();
+    ASSERT_FALSE(unreachable.ok());
+    EXPECT_EQ(unreachable.error().code, ErrorCode::NetworkError);
+    EXPECT_NE(unreachable.error().message.find("cURL error 7"), std::string::npos) << unreachable.error().message;
 }

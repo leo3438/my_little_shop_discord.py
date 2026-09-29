@@ -11,7 +11,16 @@ void ensureInitialized() {
 }
 
 Error fromCode(CURLcode code, const char* details, const std::string& where) {
-    std::string message = where + ": " + (details != nullptr && details[0] != '\0' ? details : curl_easy_strerror(code));
+    // "ftp /shop/index.json: cURL error 67 (Login denied): Access denied: 530"
+    // The code and curl's name for it are what forums and docs search for;
+    // the error buffer adds the server's own words.
+    std::string message = where + ": cURL error " + std::to_string(static_cast<int>(code)) + " (" +
+                          curl_easy_strerror(code) + ")";
+    if (details != nullptr && details[0] != '\0') {
+        std::string extra = details;
+        while (!extra.empty() && (extra.back() == '\n' || extra.back() == '\r')) extra.pop_back();
+        if (extra != curl_easy_strerror(code)) message += ": " + extra;
+    }
     switch (code) {
         case CURLE_LOGIN_DENIED: return makeError(ErrorCode::AuthenticationFailed, message);
         case CURLE_REMOTE_ACCESS_DENIED: return makeError(ErrorCode::PermissionDenied, message);

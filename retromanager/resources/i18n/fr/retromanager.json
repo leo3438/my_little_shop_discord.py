@@ -66,7 +66,8 @@
         "step_icon_ok": "Icône installée dans {}.",
         "step_icon_missing": "Icône introuvable sur le serveur.",
         "step_icon_failed": "Impossible d'installer l'icône ({}).",
-        "step_record_failed": "Version installée non mémorisée ({})."
+        "step_record_failed": "Version installée non mémorisée ({}).",
+        "technical": "Détail technique : {}"
     },
     "sync": {
         "title": "Sauvegardes cloud",
@@ -151,7 +152,7 @@
     },
     "sources": {
         "title": "Sources",
-        "hint": "A : utiliser ou supprimer  ·  X : ajouter une source  ·  ou écrivez-les dans /switch/RetroManager/config.json",
+        "hint": "Gauche / Droite : actions d'une source  ·  Y : modifier  ·  X : ajouter  ·  les sources peuvent aussi être écrites dans /switch/RetroManager/config.json",
         "active": "active",
         "empty": "Aucune source : ajoutez-en une avec X.",
         "add": "Ajouter une source",
@@ -184,7 +185,17 @@
         "missing_name": "Donnez un nom à la source.",
         "missing_url": "Saisissez l'URL de l'index.",
         "config_warnings": "config.json : des lignes ont été ignorées (config.json.bak garde votre version) :",
-        "config_invalid": "config.json illisible : {}\nCorrigez le fichier sur la carte SD puis relancez RetroManager."
+        "config_invalid": "config.json illisible : {}\nCorrigez le fichier sur la carte SD puis relancez RetroManager.",
+        "add_button": "+ Ajouter une source",
+        "edit": "Modifier",
+        "test": "Tester",
+        "form_title_edit": "Modifier la source",
+        "updated": "Source modifiée : {}",
+        "confirm_delete": "Supprimer la source « {} » ?\n(le fichier config.json est mis à jour)",
+        "testing": "Test de « {} »...",
+        "test_ok": "« {} » : connexion réussie.\n{} jeux et {} applications dans l'index ({}).",
+        "test_failed": "« {} » : échec de la connexion.\n\n{}",
+        "test_bad_index": "« {} » répond, mais son index est invalide :\n\n{}"
     },
     "forwarder": {
         "title": "Raccourci HOME",

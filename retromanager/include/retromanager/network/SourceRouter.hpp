@@ -37,6 +37,12 @@ class SourceRouter : public IRemoteSource {
     // added becomes the active one.
     bool add(std::string name, std::string type, std::shared_ptr<IRemoteSource> source);
     bool remove(const std::string& name);
+    // Swaps the client of source `name` for `source`, possibly renamed:
+    // same position, same active state. False when `name` is unknown or
+    // `newName` belongs to another source.
+    bool replace(const std::string& name, std::string newName, std::string type, std::shared_ptr<IRemoteSource> source);
+    // The client of a source (ignoring case), nullptr when unknown.
+    std::shared_ptr<IRemoteSource> sourceNamed(const std::string& name) const;
     bool setActive(const std::string& name);
     std::string activeName() const;  // "" when there is no source
     std::vector<SourceInfo> sources() const;

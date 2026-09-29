@@ -1,0 +1,11 @@
+{
+  "name": "Shop with spaces",
+  "games": [
+    {
+      "title": "Test Space Game",
+      "system": "nds",
+      "size": 19,
+      "url": "roms ds/Test Space Game (Europe).nds"
+    }
+  ]
+}

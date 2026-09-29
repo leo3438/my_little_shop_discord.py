@@ -10,9 +10,6 @@
 
         <brls:Label
             id="sources/hint"
-            focusable="true"
-            hideHighlight="true"
-            hideClickAnimation="true"
             fontSize="16"
             textColor="@theme/brls/text_disabled"
             horizontalAlign="center"

@@ -1,5 +1,7 @@
 #include "retromanager/core/Url.hpp"
 
+#include <cstring>
+
 #include <cctype>
 #include <vector>
 
@@ -172,6 +174,29 @@ std::string percentEncodePath(std::string_view path) {
             out += '%';
             out += kHex[c >> 4];
             out += kHex[c & 0x0F];
+        }
+    }
+    return out;
+}
+
+std::string encodeForTransfer(std::string_view url) {
+    static const char* kHex = "0123456789ABCDEF";
+    auto isHex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
+    std::size_t begin = url.find_first_not_of(" \t\r\n");
+    if (begin == std::string_view::npos) return "";
+    url = url.substr(begin, url.find_last_not_of(" \t\r\n") - begin + 1);
+    std::string out;
+    out.reserve(url.size());
+    for (std::size_t i = 0; i < url.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(url[i]);
+        bool escape = c <= 0x20 || c >= 0x7F || std::strchr("\"<>{}|\\^`", c) != nullptr;
+        if (c == '%') escape = !(i + 2 < url.size() && isHex(url[i + 1]) && isHex(url[i + 2]));
+        if (escape) {
+            out += '%';
+            out += kHex[c >> 4];
+            out += kHex[c & 0x0F];
+        } else {
+            out += static_cast<char>(c);
         }
     }
     return out;

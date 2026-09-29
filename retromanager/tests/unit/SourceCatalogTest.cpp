@@ -107,3 +107,57 @@ TEST(SourceCatalog, TypeShownWhileTyping) {
     EXPECT_EQ(SourceCatalog::typeForUrl("nas.local/shop"), "");
     EXPECT_EQ(SourceCatalog::typeForUrl(""), "");
 }
+
+TEST(SourceCatalog, UpdatesASourceInPlace) {
+    Fixture f;
+    ASSERT_TRUE(f.catalog->add(web()).ok());
+    ASSERT_TRUE(f.catalog->activate("Web").ok());
+
+    ShopConfig edited = f.config.sources[1];
+    edited.name = "Boutique";
+    edited.url = "https://other.example.org/index.json";
+    edited.username = "leo";
+    edited.password = "pw";
+    Status updated = f.catalog->update("Web", edited);
+    ASSERT_TRUE(updated.ok()) << updated.error().describe();
+
+    AppConfig saved = f.saved();
+    ASSERT_EQ(saved.sources.size(), 2u);  // replaced, not added
+    EXPECT_EQ(saved.sources[1].name, "Boutique");
+    EXPECT_EQ(saved.sources[1].url, "https://other.example.org/index.json");
+    EXPECT_EQ(saved.sources[1].username, "leo");
+    EXPECT_EQ(saved.sources[1].password, "pw");
+    EXPECT_EQ(saved.activeSource, "Boutique");  // the active source followed its rename
+    ASSERT_EQ(f.router.sources().size(), 2u);
+    EXPECT_EQ(f.router.sources()[1].name, "Boutique");
+    EXPECT_NE(f.router.sources()[1].description.find("other.example.org"), std::string::npos);
+}
+
+TEST(SourceCatalog, UpdateChangesTheTypeWithTheUrl) {
+    Fixture f;
+    ShopConfig nas = f.config.sources[0];
+    nas.type = "";  // what the form sends: deduced again from the URL
+    nas.url = "https://retro.example.org/shop.json";
+    ASSERT_TRUE(f.catalog->update(nas.name, nas).ok());
+    EXPECT_EQ(f.saved().sources[0].type, "http");
+    EXPECT_TRUE(f.saved().sources[0].verifyTls);
+}
+
+TEST(SourceCatalog, RefusedUpdatesChangeNothing) {
+    Fixture f;
+    ASSERT_TRUE(f.catalog->add(web()).ok());
+    AppConfig before = f.saved();
+    ShopConfig clash = f.config.sources[1];
+    clash.name = "nas";  // another source's name
+    EXPECT_EQ(f.catalog->update("Web", clash).error().code, ErrorCode::InvalidArgument);
+    ShopConfig bad = f.config.sources[1];
+    bad.url = "not a url";
+    EXPECT_FALSE(f.catalog->update("Web", bad).ok());
+    EXPECT_EQ(f.catalog->update("Missing", f.config.sources[1]).error().code, ErrorCode::NotFound);
+    EXPECT_EQ(f.saved(), before);
+    EXPECT_EQ(f.router.sources()[1].name, "Web");
+    // Keeping its own name is fine (only another source's name clashes).
+    ShopConfig same = f.config.sources[1];
+    same.username = "x";
+    EXPECT_TRUE(f.catalog->update("WEB", same).ok());
+}

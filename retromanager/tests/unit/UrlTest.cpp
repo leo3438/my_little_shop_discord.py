@@ -68,3 +68,14 @@ TEST(Url, LastPathSegment) {
     EXPECT_EQ(url::lastPathSegment("ftp://nas"), "");
     EXPECT_EQ(url::lastPathSegment("relative/a.gba"), "a.gba");
 }
+
+TEST(Url, EncodeForTransfer) {
+    EXPECT_EQ(url::encodeForTransfer("ftp://nas/roms ds/Mario Kart.nds"), "ftp://nas/roms%20ds/Mario%20Kart.nds");
+    EXPECT_EQ(url::encodeForTransfer("http://h/a%20b c"), "http://h/a%20b%20c");  // existing escapes kept
+    EXPECT_EQ(url::encodeForTransfer("http://h/100%"), "http://h/100%25");          // a lone % is not an escape
+    EXPECT_EQ(url::encodeForTransfer("http://h/Pok\xC3\xA9mon"), "http://h/Pok%C3%A9mon");
+    EXPECT_EQ(url::encodeForTransfer("http://h/a?q=x y&b=1"), "http://h/a?q=x%20y&b=1");
+    EXPECT_EQ(url::encodeForTransfer("http://h/\"a\"<b>{c}|d^`"), "http://h/%22a%22%3Cb%3E%7Bc%7D%7Cd%5E%60");
+    EXPECT_EQ(url::encodeForTransfer("  https://h/x \n"), "https://h/x");  // typed spaces around it
+    EXPECT_EQ(url::encodeForTransfer("http://user:p@ss@h/x"), "http://user:p@ss@h/x");
+}
