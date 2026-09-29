@@ -11,11 +11,32 @@ defaults:
     working-directory: retromanager
 
 jobs:
+  forwarder-stub:
+    name: Forwarder stub (main + main.npdm)
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (nx-hbloader + RetroManager patch)
+        run: tools/forwarder-stub/build.sh build/forwarder-stub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stub
+          path: retromanager/build/forwarder-stub/
+
   tests:
     name: Unit tests (ASan + UBSan)
     runs-on: ubuntu-24.04
+    needs: forwarder-stub
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: stub
+          path: ${{ runner.temp }}/stub-artifact
+      - name: Use the built forwarder stub in the tests
+        run: echo "RM_TEST_STUB_DIR=$RUNNER_TEMP/stub-artifact/stub" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-openssl-dev samba smbclient
@@ -45,7 +66,7 @@ jobs:
           cp "$RUNNER_TEMP/hactool/config.mk.template" "$RUNNER_TEMP/hactool/config.mk"
           make -C "$RUNNER_TEMP/hactool" -j"$(nproc)"
           echo "RM_HACTOOL=$RUNNER_TEMP/hactool/hactool" >> "$GITHUB_ENV"
-      - name: Test (FTP/FTPS/HTTP/SMB integration and hactool check included)
+      - name: Test (FTP/FTPS/HTTP/SMB integration, hactool and forwarder stub checks included)
         run: ctest --preset tests
 
   tests-bundled-curl:

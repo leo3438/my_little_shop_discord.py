@@ -128,4 +128,6 @@ sources publiques (https://github.com/sahlberg/libsmb2, commit figé dans
 `cmake/Dependencies.cmake`) et liée statiquement ; les sources de RetroManager
 étant publiques, l'application peut être reconstruite avec une autre version
 de la bibliothèque. stb (domaine public / MIT), nlohmann/json (MIT), libcurl
-(licence curl), Borealis (Apache-2.0).
+(licence curl), Borealis (Apache-2.0). Le stub des raccourcis HOME (artefact
+CI `stub`) est nx-hbloader (ISC), patché : voir
+[docs/FORWARDERS.md](docs/FORWARDERS.md).

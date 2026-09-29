@@ -1,0 +1,70 @@
+diff --git a/source/main.c b/source/main.c
+index 78e4502..d2f4c0d 100644
+--- a/source/main.c
++++ b/source/main.c
+@@ -3,7 +3,12 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ 
+-#define DEFAULT_NRO "sdmc:/hbmenu.nro"
++#include "romfs_lookup.h"
++
++// RetroManager forwarder: instead of hbmenu, the first NRO (and its argv)
++// comes from this application's own RomFS: romfs:/nextNroPath and
++// romfs:/nextArgv. When that NRO returns without chaining another one
++// (envSetNextLoad), the forwarder exits back to HOME.
+ 
+ const char g_noticeText[] =
+     "nx-hbloader " VERSION "\0"
+@@ -308,6 +313,29 @@ static void getCodeMemoryCapability(void)
+     }
+ }
+ 
++static bool g_forwarderStarted = false;
++
++static bool readDataStorage(void* ctx, uint64_t offset, void* buf, size_t size)
++{
++    return R_SUCCEEDED(fsStorageRead((FsStorage*)ctx, (s64)offset, buf, size));
++}
++
++static void loadForwarderTarget(void)
++{
++    FsStorage storage;
++    if (R_FAILED(fsOpenDataStorageByCurrentProcess(&storage)))
++        diagAbortWithResult(MAKERESULT(Module_HomebrewLoader, 100));
++
++    long pathLen = rl_read_root_file(readDataStorage, &storage, "nextNroPath", g_nextNroPath, sizeof g_nextNroPath);
++    long argvLen = rl_read_root_file(readDataStorage, &storage, "nextArgv", g_nextArgv, sizeof g_nextArgv);
++    fsStorageClose(&storage);
++
++    if (pathLen <= 0)
++        diagAbortWithResult(MAKERESULT(Module_HomebrewLoader, 101));
++    if (argvLen <= 0)
++        memcpy(g_nextArgv, g_nextNroPath, (size_t)pathLen + 1);
++}
++
+ void loadNro(void)
+ {
+     NroHeader* header = NULL;
+@@ -353,8 +381,10 @@ void loadNro(void)
+ 
+     if (g_nextNroPath[0] == '\0')
+     {
+-        memcpy(g_nextNroPath, DEFAULT_NRO, sizeof(DEFAULT_NRO));
+-        memcpy(g_nextArgv,    DEFAULT_NRO, sizeof(DEFAULT_NRO));
++        if (g_forwarderStarted)
++            svcExitProcess();
++        g_forwarderStarted = true;
++        loadForwarderTarget();
+     }
+ 
+     memcpy(g_argv, g_nextArgv, sizeof g_argv);
+@@ -375,7 +405,7 @@ void loadNro(void)
+     if (fd < 0)
+         diagAbortWithResult(MAKERESULT(Module_HomebrewLoader, 3));
+ 
+-    // Reset NRO path to load hbmenu by default next time.
++    // Reset NRO path: exit to HOME next time unless the NRO chains another one.
+     g_nextNroPath[0] = '\0';
+ 
+     if (read(fd, start, sizeof(*start)) != sizeof(*start))

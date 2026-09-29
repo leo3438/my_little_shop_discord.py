@@ -21,6 +21,8 @@ endif ()
 if (NOT RM_WITH_SMB)
     list(FILTER RM_TEST_SOURCES EXCLUDE REGEX "/Smb[A-Za-z]*Test\\.cpp$")
 endif ()
+# The forwarder stub's RomFS reader (C, shared with tools/forwarder-stub).
+list(APPEND RM_TEST_SOURCES ${PROJECT_SOURCE_DIR}/tools/forwarder-stub/source/romfs_lookup.c)
 add_executable(retromanager_tests ${RM_TEST_SOURCES})
 target_link_libraries(retromanager_tests PRIVATE retromanager_mocks GTest::gtest_main GTest::gmock)
 if (RM_WITH_CURL)

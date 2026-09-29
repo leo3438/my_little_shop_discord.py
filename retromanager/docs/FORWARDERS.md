@@ -29,13 +29,32 @@ désinstallez-les (DBI) et regénérez-les.
 | Fichier | Rôle | Où le trouver |
 |---|---|---|
 | `/switch/prod.keys` | Clés de **votre** console (`header_key`, `key_area_key_application_00`), pour chiffrer les NCA | Dump avec Lockpick_RCM |
-| `/switch/RetroManager/stub/main` | Exécutable du forwarder (ExeFS) | Un stub de forwarder type nx-hbloader qui lance `romfs:/nextNroPath` avec `romfs:/nextArgv` |
-| `/switch/RetroManager/stub/main.npdm` | Métadonnées de l'exécutable (son title id est remplacé) | Livré avec le stub |
+| `/switch/RetroManager/stub/main` | Exécutable du forwarder (ExeFS) | Artefact CI **`stub`** (voir ci-dessous) |
+| `/switch/RetroManager/stub/main.npdm` | Métadonnées de l'exécutable (son title id est remplacé) | Artefact CI **`stub`** |
 | `/switch/RetroManager/stub/logo/` *(facultatif)* | `NintendoLogo.png`, `StartupMovie.gif` affichés au lancement | Livrés avec certains stubs |
 | `/retroarch/cores/<core>_libretro_libnx.nro` | Le core RetroArch du système | Mise à jour en ligne de RetroArch |
 
 Un stub rangé en `stub/exefs/main` et `stub/exefs/main.npdm` est aussi
-accepté. RetroManager ne fournit ni les clés ni le stub.
+accepté. RetroManager ne fournit pas les clés.
+
+### Le stub (`main` + `main.npdm`)
+
+La CI le compile à chaque build (job « Forwarder stub ») et le publie dans
+l'artefact **`stub`** (`stub.zip`), à côté de `RetroManager-nro`. Dézippez-le
+et copiez `main` et `main.npdm` dans `/switch/RetroManager/stub/`.
+
+Il est construit depuis les sources de
+[nx-hbloader](https://github.com/switchbrew/nx-hbloader) (licence ISC,
+version figée), avec `tools/forwarder-stub/nx-hbloader.patch` :
+
+- au lancement, il lit `romfs:/nextNroPath` et `romfs:/nextArgv` dans la
+  RomFS du NSP (au lieu de lancer `hbmenu.nro`) ;
+- quand RetroArch se ferme, il revient à l'accueil (sauf si RetroArch
+  enchaîne un autre `.nro`, par exemple un changement de core) ;
+- son NPDM déclare une *application* (hbloader seul se déclare applet).
+
+Pour le recompiler soi-même (devkitA64 + libnx) :
+`tools/forwarder-stub/build.sh <dossier de sortie>`.
 
 Si un fichier manque, l'écran le dit précisément, par exemple :
 
