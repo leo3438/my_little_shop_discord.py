@@ -23,7 +23,13 @@ Result<AppConfig> ConfigManager::loadOrCreate() {
 
 Status ConfigManager::save(const AppConfig& config) {
     if (Status dir = fs_.createDirectories(vpath::parent(path_)); !dir) return dir;
-    return fs_.writeFile(path_, serializeConfig(config));
+    const std::string text = serializeConfig(config);
+    // The file may have been written by hand (comments, the user's layout):
+    // the version being replaced is kept as config.json.bak.
+    if (auto previous = fs_.readFile(path_); previous && previous.value() != text) {
+        if (Status backup = fs_.writeFile(path_ + ".bak", previous.value()); !backup) return backup;
+    }
+    return fs_.writeFile(path_, text);
 }
 
 }  // namespace rm

@@ -73,6 +73,7 @@ struct RemoteSources {
     std::string savesBaseUrl;  // empty = cloud saves not configured
     rm::AppConfig config;
     bool configLoaded = false;  // false: config.json is invalid, never rewrite it
+    std::string configError;    // why config.json could not be read
 };
 
 RemoteSources createRemoteSources(rm::AppContext& context) {
@@ -81,6 +82,7 @@ RemoteSources createRemoteSources(rm::AppContext& context) {
     auto config = configManager.loadOrCreate();
     if (!config) {
         brls::Logger::error("Configuration: {}", config.error().describe());
+        sources.configError = config.error().message;
         rm::Error error = rm::makeError(rm::ErrorCode::NotConfigured, config.error().message);
         sources.shops = std::make_unique<rm::SourceRouter>();
         sources.shops->add("config.json", "ftp", std::make_shared<rm::UnavailableRemoteSource>(error, configManager.path()));
@@ -89,6 +91,7 @@ RemoteSources createRemoteSources(rm::AppContext& context) {
     }
     sources.config = config.value();
     sources.configLoaded = true;
+    for (const std::string& warning : sources.config.warnings) brls::Logger::warning("config.json: {}", warning);
 
 #ifdef RM_WITH_CURL
     sources.shops = rm::createSourceRouter(sources.config);
@@ -202,7 +205,16 @@ int main(int argc, char* argv[]) {
 #ifdef RM_WITH_CURL
     rm::ConfigManager configManager(context.fileSystem(), context.layout().appConfig);
     rm::SourceCatalog catalog(remotes.config, *remotes.shops, configManager, remotes.configLoaded);
-    openSources = [&] { brls::Application::pushActivity(new rm::ui::SourcesActivity(catalog, *remotes.shops, bus)); };
+    std::string configNotes;
+    if (!remotes.configError.empty()) {
+        configNotes = brls::getStr("retromanager/sources/config_invalid", remotes.configError);
+    } else if (!remotes.config.warnings.empty()) {
+        configNotes = brls::getStr("retromanager/sources/config_warnings");
+        for (const std::string& warning : remotes.config.warnings) configNotes += "\n• " + warning;
+    }
+    openSources = [&, configNotes] {
+        brls::Application::pushActivity(new rm::ui::SourcesActivity(catalog, *remotes.shops, bus, configNotes));
+    };
 #endif
 
     brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus,

@@ -20,6 +20,7 @@ class ConfigManager {
     Result<AppConfig> loadOrCreate();
 
     // Atomic replace; creates the parent directory if needed.
+    // Keeps the replaced file as <path>.bak when its content changes.
     Status save(const AppConfig& config);
 
     const std::string& path() const { return path_; }

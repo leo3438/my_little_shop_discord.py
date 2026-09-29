@@ -32,9 +32,13 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 }
 ```
 
-Les sources se gèrent aussi depuis l'écran **Sources** de l'accueil (ajout au
-clavier de la console, choix de la source active, suppression) : chaque
-changement est appliqué tout de suite et réécrit ce fichier. L'ancien format
+Les sources se gèrent aussi depuis l'écran **Sources** de l'accueil (X : un
+formulaire Nom / URL de l'index / Utilisateur / Mot de passe, chaque valeur
+restant affichée en entier ; choix de la source active ; suppression) : chaque
+changement est appliqué tout de suite et réécrit ce fichier. La version
+remplacée est gardée dans `config.json.bak`.
+
+![Formulaire d'ajout d'une source (build desktop)](source-form-desktop.png) L'ancien format
 à une seule boutique (`"shop": {...}`) est toujours lu : il devient la source
 « NAS » et le fichier est réécrit au nouveau format à la première
 modification.
@@ -90,13 +94,47 @@ changement. Au lancement suivant, les éléments qui restaient (y compris celui
 qui était en cours) sont remis en file automatiquement et reprennent grâce à
 leur fichier `.tmp`. Supprimer `queue.json` vide la file.
 
+## Écrire ses sources à la main
+
+Le fichier peut être rédigé directement (Bloc-notes, éditeur du NAS…), sans
+passer par le menu d'ajout ; il est relu à chaque lancement. RetroManager
+accepte ce qu'on écrit en pratique :
+
+```jsonc
+{
+  // commentaires // et /* */, virgules finales, BOM UTF-8 du Bloc-notes
+  "sources": [
+    { "name": "NAS du salon", "type": "FTP", "url": "ftp://192.168.1.20/shop/",
+      "user": "leo", "pass": 1234, },
+    { "name": "Web", "index_url": "https://retro.example.org/shop.json" },
+    "ftp://192.168.1.21/jeux/",
+  ],
+  "active_source": "nas du salon",
+}
+```
+
+- **Alias** : `user` / `login` pour `username`, `pass` pour `password`,
+  `index_url` / `index` / `address` pour `url`, `label` pour `name`,
+  `verify_tls` pour `verifyTls` ; `type` sans casse, `https` / `web` = `http`,
+  `ftps` / `nas` = `ftp`.
+- Une source peut n'être qu'une **URL** (nom « Source N ») ; `"sources"` peut
+  être un seul objet au lieu d'un tableau ; un mot de passe ou un identifiant
+  tapé sans guillemets (`1234`) est accepté ; `true` / `false` s'écrivent
+  aussi `oui` / `non`, `yes` / `no`.
+- Deux sources au même nom : la seconde devient « Nom (2) ».
+
 ## Comportement
 
 - **Champ manquant** : valeur par défaut. **Champ inconnu** : ignoré.
-- **Mauvais type** (mot de passe numérique, `verifyTls: "non"`…) ou JSON
-  invalide : la configuration est **refusée** et le fichier n'est **jamais
-  réécrit**. La boutique affiche l'erreur (avec la ligne et la colonne), à
-  corriger sur la carte SD.
+- **Source incohérente** (type `smb`, mot de passe en tableau…) : **cette
+  source seule** est ignorée, jamais remplacée par des valeurs par défaut ;
+  les autres sont chargées. L'écran **Sources** liste ce qui a été ignoré et
+  pourquoi. Un champ général de mauvais type (`saves_url: 3`…) garde sa
+  valeur par défaut, avec le même avertissement.
+- **JSON illisible** (accolade manquante…) : la configuration est refusée et
+  le fichier n'est **jamais réécrit** ; les écrans Boutique et Sources
+  affichent l'erreur avec la **ligne et la colonne**, à corriger sur la carte
+  SD.
 - URL vide, invalide ou non supportée (`smb://` pour l'instant) :
   l'application démarre quand même ; l'écran Boutique explique quoi corriger.
 

@@ -1,14 +1,11 @@
 #include "retromanager/ui/SourcesActivity.hpp"
 
+#include "retromanager/core/Format.hpp"
+#include "retromanager/ui/SourceFormActivity.hpp"
+
 namespace rm::ui {
 
 namespace {
-
-std::string trim(const std::string& text) {
-    std::size_t begin = text.find_first_not_of(" \t");
-    std::size_t end = text.find_last_not_of(" \t");
-    return begin == std::string::npos ? "" : text.substr(begin, end - begin + 1);
-}
 
 std::string typeLabel(const std::string& type) {
     if (type == "http") return brls::getStr("retromanager/sources/type_http");
@@ -16,16 +13,14 @@ std::string typeLabel(const std::string& type) {
     return brls::getStr("retromanager/sources/type_ftp");
 }
 
-// Opens the next keyboard once the current one is closed.
-void nextPrompt(std::function<void()> open) { brls::sync(std::move(open)); }
-
 }  // namespace
 
-SourcesActivity::SourcesActivity(SourceCatalog& catalog, SourceRouter& router, EventBus& bus)
-    : catalog_(catalog), router_(router), bus_(bus) {}
+SourcesActivity::SourcesActivity(SourceCatalog& catalog, SourceRouter& router, EventBus& bus, std::string configNotes)
+    : catalog_(catalog), router_(router), bus_(bus), configNotes_(std::move(configNotes)) {}
 
 void SourcesActivity::onContentAvailable() {
-    hint->setText(brls::getStr("retromanager/sources/hint"));
+    hint->setText(configNotes_.empty() ? brls::getStr("retromanager/sources/hint")
+                                       : brls::getStr("retromanager/sources/hint") + "\n\n" + configNotes_);
     root->registerAction(brls::getStr("retromanager/sources/add"), brls::BUTTON_X, [this](brls::View*) {
         promptAdd();
         return true;
@@ -39,10 +34,26 @@ void SourcesActivity::rebuild() {
     brls::View* first = nullptr;
     brls::View* active = nullptr;
     for (const SourceInfo& source : router_.sources()) {
-        auto* cell = new brls::DetailCell();
-        cell->setText(source.active ? source.name + "  ·  " + brls::getStr("retromanager/sources/active") : source.name);
-        cell->setDetailText(typeLabel(source.type) + "  ·  " + source.description);
-        cell->setDetailTextColor(brls::Application::getTheme().getColor("brls/text_disabled"));
+        // Name, then type and address on their own line: a long URL wraps
+        // instead of being cut off at the right edge.
+        auto* cell = new brls::Box(brls::Axis::COLUMN);
+        cell->setFocusable(true);
+        cell->setPadding(12, 16, 12, 16);
+        cell->setMarginBottom(6);
+        auto* title = new brls::Label();
+        title->setFontSize(22);
+        title->setText(source.active ? source.name + "  ·  " + brls::getStr("retromanager/sources/active") : source.name);
+        if (source.active) title->setTextColor(brls::Application::getTheme().getColor("brls/accent"));
+        cell->addView(title);
+        auto* detail = new brls::Label();
+        detail->setFontSize(17);
+        detail->setMarginTop(4);
+        detail->setText(breakLongLines(typeLabel(source.type) + "  ·  " + source.description, 90));
+        detail->setWidthPercentage(100);
+        detail->setAutoAnimate(false);
+        detail->setTextColor(brls::Application::getTheme().getColor("brls/text_disabled"));
+        cell->addView(detail);
+        cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
         const std::string name = source.name;
         cell->registerClickAction([this, name](brls::View*) {
             openActions(name);
@@ -75,48 +86,11 @@ void SourcesActivity::openActions(const std::string& name) {
 }
 
 void SourcesActivity::promptAdd() {
-    auto draft = std::make_shared<ShopConfig>();
-    draft->type.clear();  // deduced from the address
-    auto* ime = brls::Application::getImeManager();
-    ime->openForText(
-        [this, draft](std::string name) {
-            draft->name = trim(name);
-            if (draft->name.empty()) return;
-            nextPrompt([this, draft] {
-                brls::Application::getImeManager()->openForText(
-                    [this, draft](std::string address) {
-                        draft->url = trim(address);
-                        if (draft->url.empty()) return;
-                        nextPrompt([this, draft] {
-                            brls::Application::getImeManager()->openForText(
-                                [this, draft](std::string user) {
-                                    draft->username = trim(user);
-                                    if (draft->username.empty()) return finishAdd(draft);  // anonymous
-                                    nextPrompt([this, draft] {
-                                        brls::Application::getImeManager()->openForText(
-                                            [this, draft](std::string password) {
-                                                draft->password = password;
-                                                finishAdd(draft);
-                                            },
-                                            brls::getStr("retromanager/sources/prompt_password"), "", 128);
-                                    });
-                                },
-                                brls::getStr("retromanager/sources/prompt_user"),
-                                brls::getStr("retromanager/sources/prompt_user_hint"), 64);
-                        });
-                    },
-                    brls::getStr("retromanager/sources/prompt_url"), brls::getStr("retromanager/sources/prompt_url_hint"),
-                    256);
-            });
-        },
-        brls::getStr("retromanager/sources/prompt_name"), "", 32);
-}
-
-void SourcesActivity::finishAdd(const std::shared_ptr<ShopConfig>& draft) {
-    brls::sync([this, draft] {
-        brls::Logger::info("Sources: adding {} ({})", draft->name, draft->url);
-        changed(catalog_.add(*draft), brls::getStr("retromanager/sources/added", draft->name));
-    });
+    brls::Application::pushActivity(new SourceFormActivity(catalog_, [this](const std::string& name) {
+        brls::Application::notify(brls::getStr("retromanager/sources/added", name));
+        rebuild();
+        bus_.publish(SourcesChanged{});
+    }));
 }
 
 void SourcesActivity::changed(const Status& result, const std::string& okMessage) {

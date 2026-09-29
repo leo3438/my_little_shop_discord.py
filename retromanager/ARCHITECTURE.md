@@ -441,8 +441,15 @@ flowchart LR
   (`shared_ptr`).
 - **`SourceCatalog`** : ajout / suppression / activation d'une source, validé
   comme le ferait le client, appliqué au routeur **et** enregistré dans
-  `config.json` (jamais si le fichier était illisible). Écran `SourcesActivity`
-  (saisie au clavier de la console, confirmation par boîte de dialogue).
+  `config.json` (jamais si le fichier était illisible ; la version remplacée
+  reste dans `config.json.bak`). Écran `SourcesActivity` (liste sur deux
+  lignes, avertissements de `config.json`) et formulaire `SourceFormActivity`
+  (champs libellés `FormField` : valeur affichée en entier, clavier de la
+  console prérempli, erreurs dans le formulaire).
+- **`config.json` écrit à la main** : `parseConfig` accepte BOM, commentaires,
+  virgules finales, alias de clés, URL seule ; une source incohérente est
+  ignorée (jamais complétée par défaut) et décrite dans `AppConfig::warnings`,
+  les autres sont chargées.
 - **Scraper** : `ThumbnailManager` essaie la jaquette de l'index, puis
   `<base>/<système libretro>/Named_Boxarts/<libellé>.png` (encodé), en
   silence en cas d'absence.
@@ -485,8 +492,9 @@ flowchart LR
   forwarder) lance `romfs:/nextNroPath` avec `romfs:/nextArgv`. RetroManager
   y écrit `sdmc:/retroarch/cores/<core>_libretro_libnx.nro` et
   `"<core>" "sdmc:/roms/<système>/<rom>"`.
-- **Title ID** : `0x05` + 44 bits d'un SHA-256 du chemin de la ROM + `000` :
-  stable (regénérer remplace le même titre), dans la plage homebrew.
+- **Title ID** : `0x0100` + 32 bits d'un SHA-256 du chemin de la ROM +
+  `0000` : forme d'une application standard (le menu HOME ignore les autres),
+  stable (regénérer remplace le même titre).
 - **`IconMaker`** (`forwarder/`) : stb_image (PNG, JPEG…), mise à l'échelle
   (stb_image_resize2) *sans recadrer* dans un carré 256x256, bandes remplies
   avec la couleur moyenne du bord, JPEG (stb_image_write) dont la qualité

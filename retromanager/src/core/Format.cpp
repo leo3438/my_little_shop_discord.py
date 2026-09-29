@@ -27,4 +27,38 @@ std::string formatBytes(std::uint64_t bytes) {
     return std::string(buffer) + " " + kUnits[unit];
 }
 
+std::string breakLongLines(const std::string& text, std::size_t maxRun) {
+    if (maxRun == 0) return text;
+    auto continuation = [&](std::size_t i) { return (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80; };
+    std::string out;
+    std::size_t start = 0;  // of the current run (no space, no newline)
+    for (std::size_t i = 0; i <= text.size(); ++i) {
+        bool end = i == text.size() || text[i] == ' ' || text[i] == '\n';
+        if (!end) continue;
+        // The run text[start, i): cut it into pieces of at most maxRun bytes.
+        std::size_t pos = start;
+        while (i - pos > maxRun) {
+            std::size_t cut = 0;
+            for (std::size_t j = pos + maxRun; j > pos; --j) {  // cut after a separator
+                char c = text[j - 1];
+                if (c == '/' || c == '.' || c == '?' || c == '&' || c == '=' || c == '-') {
+                    cut = j;
+                    break;
+                }
+            }
+            if (cut == 0) {
+                cut = pos + maxRun;
+                while (cut > pos + 1 && continuation(cut)) --cut;
+            }
+            out.append(text, pos, cut - pos);
+            out += '\n';
+            pos = cut;
+        }
+        out.append(text, pos, i - pos);
+        if (i < text.size()) out += text[i];
+        start = i + 1;
+    }
+    return out;
+}
+
 }  // namespace rm

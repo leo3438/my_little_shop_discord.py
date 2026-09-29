@@ -229,12 +229,14 @@ Result<std::uint64_t> npdmTitleId(const Bytes& npdm) {
 // ---------------------------------------------------------------------------
 
 std::uint64_t forwarderTitleId(const std::string& seed) {
+    // 0x0100 | 32 bits of SHA-256(seed) | 0x0000. HOME menu only lists
+    // applications whose id has this shape: application range, low 16 bits
+    // clear (the update is id + 0x800, add-ons id + 0x1000 and up).
     auto digest = crypto::Sha256::of(seed.data(), seed.size());
-    std::uint64_t v = 0;
-    for (int i = 0; i < 8; ++i) v = (v << 8) | digest[static_cast<std::size_t>(i)];
-    v &= 0x00FFFFFFFFFFF000ull;
-    if (v == 0) v = 0x1000;
-    return 0x0500000000000000ull | v;
+    std::uint32_t middle = 0;
+    for (int i = 0; i < 4; ++i) middle = (middle << 8) | digest[static_cast<std::size_t>(i)];
+    if (middle == 0) middle = 1;  // 0x0100000000000000.. is system titles
+    return 0x0100000000000000ull | (static_cast<std::uint64_t>(middle) << 16);
 }
 
 }  // namespace rm::nsp

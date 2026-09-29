@@ -53,3 +53,15 @@ TEST(Format, Bytes) {
     EXPECT_EQ(formatBytes(3221225472ull), "3 GB");
     EXPECT_EQ(formatBytes(5905580032ull), "5.5 GB");
 }
+
+TEST(Format, BreakLongLinesCutsAtSeparators) {
+    EXPECT_EQ(breakLongLines("NAS du salon", 20), "NAS du salon");
+    EXPECT_EQ(breakLongLines("ftp://nas/shop/very/long/path/index.json", 16), "ftp://nas/shop/\nvery/long/path/\nindex.json");
+    // Nothing to cut at: a hard break.
+    EXPECT_EQ(breakLongLines("abcdefghij", 4), "abcd\nefgh\nij");
+    // Words with spaces wrap on their own: only over-long runs are cut.
+    EXPECT_EQ(breakLongLines("a b ccccccccc", 4), "a b cccc\ncccc\nc");
+    EXPECT_EQ(breakLongLines("", 10), "");
+    // Never splits a UTF-8 character.
+    EXPECT_EQ(breakLongLines("\xC3\xA9\xC3\xA9\xC3\xA9", 4), "\xC3\xA9\xC3\xA9\n\xC3\xA9");
+}

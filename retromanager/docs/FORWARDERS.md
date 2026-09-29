@@ -19,6 +19,11 @@ directement RetroArch avec le bon core et la bonne ROM.
 Regénérer le raccourci d'un même jeu produit le même *title id* : la
 nouvelle installation remplace l'ancienne.
 
+Le *title id* a la forme d'une application standard, `0100xxxxxxxx0000`
+(8 chiffres tirés du chemin de la ROM) : c'est ce que le menu HOME affiche.
+Les raccourcis générés avant ce correctif (`05…`) ne s'affichaient pas :
+désinstallez-les (DBI) et regénérez-les.
+
 ## Ce qu'il faut sur la carte SD
 
 | Fichier | Rôle | Où le trouver |
@@ -46,6 +51,10 @@ Les clés ne sont jamais recopiées, envoyées ni écrites dans les journaux.
   bord), en JPEG. Sans jaquette : une icône unie.
 - **Titre** : le nom du jeu (toutes les langues) ; éditeur « RetroArch -
   <système> ».
+- **Chaîne de l'icône** : le CNMT (type *Application*, `0x80`) référence la
+  NCA *Control*, qui contient `control.nacp` et un `icon_<Langue>.dat` par
+  langue (JPEG 256x256). Le NACP n'a pas de champ « type » : c'est le CNMT
+  et le type de contenu des NCA qui font de l'ensemble une application.
 - **Lancement** : `romfs:/nextNroPath` = le core, `romfs:/nextArgv` =
   `"sdmc:/retroarch/cores/<core>.nro" "sdmc:/roms/<système>/<rom>"`.
 - **Core** : le premier installé parmi, par exemple, `mgba`, `vba_next`,

@@ -1,0 +1,62 @@
+<brls:AppletFrame>
+    <brls:Box
+        id="form/root"
+        title="@i18n/retromanager/sources/form_title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        grow="1.0">
+
+        <brls:ScrollingFrame
+            width="auto"
+            height="auto"
+            grow="1.0">
+            <brls:Box
+                id="form/fields"
+                width="auto"
+                height="auto"
+                axis="column"
+                paddingTop="16"
+                paddingRight="@style/brls/sidebar/padding_right"
+                paddingLeft="@style/brls/sidebar/padding_left"
+                paddingBottom="@style/brls/sidebar/padding_bottom">
+
+                <!-- Deduced from the URL while it is typed. -->
+                <brls:Label
+                    id="form/type"
+                    fontSize="18"
+                    textColor="@theme/brls/text_disabled"
+                    marginTop="8"
+                    marginBottom="8" />
+
+                <!-- Why "Save" was refused, in place (not a toast that vanishes). -->
+                <brls:Label
+                    id="form/error"
+                    visibility="gone"
+                    fontSize="18"
+                    textColor="#ff6666"
+                    marginBottom="12" />
+
+                <brls:Box
+                    width="auto"
+                    height="auto"
+                    axis="row"
+                    justifyContent="center"
+                    marginTop="16">
+                    <brls:Button
+                        id="form/save"
+                        style="primary"
+                        width="280"
+                        marginRight="24"
+                        text="@i18n/retromanager/sources/save" />
+                    <brls:Button
+                        id="form/cancel"
+                        style="bordered"
+                        width="280"
+                        text="@i18n/retromanager/sources/cancel" />
+                </brls:Box>
+            </brls:Box>
+        </brls:ScrollingFrame>
+    </brls:Box>
+</brls:AppletFrame>

@@ -70,7 +70,7 @@ struct CnmtInfo {
 constexpr std::uint8_t kCnmtApplication = 0x80;
 
 Bytes buildApplicationCnmt(std::uint64_t titleId, std::uint32_t version, const std::vector<ContentRecord>& contents);
-std::string cnmtFileName(std::uint64_t titleId);  // Application_0500000000001000.cnmt
+std::string cnmtFileName(std::uint64_t titleId);  // Application_0100123456780000.cnmt
 Result<CnmtInfo> readCnmt(const Bytes& cnmt);
 
 // --- NPDM -----------------------------------------------------------------
@@ -82,8 +82,8 @@ Result<std::uint64_t> npdmTitleId(const Bytes& npdm);  // the ACI0 program id
 
 // --- Title ids --------------------------------------------------------------
 
-// 0x05XXXXXXXXXXX000 derived from `seed` (e.g. the ROM path): stable, in
-// the homebrew range, low 12 bits clear (update = +0x800, DLC = +0x1000...).
+// 0x0100XXXXXXXX0000 derived from `seed` (e.g. the ROM path): stable, the
+// shape of a standard application id (HOME menu ignores other shapes).
 std::uint64_t forwarderTitleId(const std::string& seed);
 std::string titleIdHex(std::uint64_t titleId);  // 16 lowercase hex digits
 

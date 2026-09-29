@@ -8,13 +8,15 @@
 
 namespace rm::ui {
 
-// The user's shops (NAS over FTP, web shops over HTTP). A on a source:
-// use it (the shop screen shows it from now on) or delete it. X adds one:
-// name, address, then optional user name and password, typed on the
-// console keyboard. Changes apply immediately and are saved to config.json.
+// The user's shops (NAS over FTP, web shops over HTTP), as read from
+// config.json (hand-written sources included) plus what was ignored in it.
+// A on a source: use it (the shop screen shows it from now on) or delete
+// it. X opens the add form (SourceFormActivity). Changes apply immediately
+// and are saved to config.json.
 class SourcesActivity : public brls::Activity {
   public:
-    SourcesActivity(SourceCatalog& catalog, SourceRouter& router, EventBus& bus);
+    // `configNotes`: config.json warnings, or why it could not be read.
+    SourcesActivity(SourceCatalog& catalog, SourceRouter& router, EventBus& bus, std::string configNotes = "");
 
     CONTENT_FROM_XML_RES("activity/sources.xml");
 
@@ -24,12 +26,12 @@ class SourcesActivity : public brls::Activity {
     void rebuild();
     void openActions(const std::string& name);
     void promptAdd();
-    void finishAdd(const std::shared_ptr<ShopConfig>& draft);
     void changed(const Status& result, const std::string& okMessage);
 
     SourceCatalog& catalog_;
     SourceRouter& router_;
     EventBus& bus_;
+    std::string configNotes_;
 
     BRLS_BIND(brls::Box, root, "sources/root");
     BRLS_BIND(brls::Label, hint, "sources/hint");

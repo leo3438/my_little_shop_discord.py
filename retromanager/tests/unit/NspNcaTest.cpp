@@ -53,7 +53,7 @@ Bytes fakeNpdm() {
     return npdm;
 }
 
-constexpr std::uint64_t kTid = 0x0500000000123000ull;
+constexpr std::uint64_t kTid = 0x0100000012340000ull;
 
 ApplicationSpec sampleSpec() {
     ApplicationSpec spec;

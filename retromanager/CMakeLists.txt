@@ -150,7 +150,7 @@ if (RM_BUILD_APP)
     endif ()
 
     if (RM_WITH_CURL)
-        list(APPEND RM_APP_SRC src/ui/SourcesActivity.cpp)  # edits sources through the curl clients
+        list(APPEND RM_APP_SRC src/ui/SourcesActivity.cpp src/ui/SourceFormActivity.cpp)  # edits sources through the curl clients
     endif ()
     program_target(${PROJECT_NAME} "${RM_APP_SRC}")
     target_compile_options(${PROJECT_NAME} PRIVATE -ffunction-sections -fdata-sections ${APP_PLATFORM_OPTION})

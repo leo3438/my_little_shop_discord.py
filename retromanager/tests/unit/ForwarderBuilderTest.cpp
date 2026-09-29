@@ -266,3 +266,41 @@ TEST_F(ForwarderBuilderTest, EndToEndWithTheRealPackager) {
         }
     }
 }
+
+// What HOME menu needs to show the shortcut: an Application meta whose
+// Control content carries control.nacp and one 256x256 JPEG icon per language.
+TEST_F(ForwarderBuilderTest, HomeMenuIconChain) {
+    ForwarderReport report = builder(ForwarderBuilder::defaultPackager()).build(gbaGame(), cancel);
+    ASSERT_TRUE(report.ok()) << report.detail;
+    EXPECT_EQ(nsp::titleIdHex(report.titleId).substr(0, 4), "0100");
+    EXPECT_EQ(nsp::titleIdHex(report.titleId).substr(12), "0000");
+
+    std::string file = fs.readFile(report.nspPath).value();
+    auto app = nsp::readApplicationNsp(Bytes(file.begin(), file.end()), fakeKeys());
+    ASSERT_TRUE(app.ok()) << app.error().describe();
+    EXPECT_EQ(app.value().cnmt.type, nsp::kCnmtApplication);
+    EXPECT_EQ(app.value().cnmt.titleId, report.titleId);
+    bool hasControl = false;
+    for (const auto& c : app.value().cnmt.contents) hasControl |= c.type == nsp::CnmtContentType::Control;
+    EXPECT_TRUE(hasControl);
+
+    int icons = 0;
+    bool nacpOk = false;
+    for (const auto& f : app.value().control) {
+        if (f.name == "control.nacp") {
+            nacpOk = f.data.size() == nsp::kNacpSize && nsp::nacpName(f.data) == "Tom & Jerry";
+            continue;
+        }
+        ASSERT_EQ(f.name.rfind("icon_", 0), 0u) << f.name;
+        auto image = forwarder::decodeImage(f.data);
+        ASSERT_TRUE(image.ok()) << f.name;
+        EXPECT_EQ(image.value().width, 256);
+        EXPECT_EQ(image.value().height, 256);
+        EXPECT_EQ(f.data[0], 0xFF);
+        EXPECT_EQ(f.data[1], 0xD8);
+        EXPECT_LE(f.data.size(), forwarder::kMaxIconBytes);
+        ++icons;
+    }
+    EXPECT_TRUE(nacpOk);
+    EXPECT_EQ(icons, nsp::kNacpLanguages);
+}

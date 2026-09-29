@@ -14,6 +14,12 @@ std::string lower(std::string value) {
     return value;
 }
 
+std::string trim(const std::string& text) {
+    std::size_t begin = text.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos) return "";
+    return text.substr(begin, text.find_last_not_of(" \t\r\n") - begin + 1);
+}
+
 }  // namespace
 
 SourceCatalog::SourceCatalog(AppConfig& config, SourceRouter& router, ConfigManager& manager, bool configLoaded)
@@ -21,7 +27,20 @@ SourceCatalog::SourceCatalog(AppConfig& config, SourceRouter& router, ConfigMana
 
 Status SourceCatalog::save() { return manager_.save(config_); }
 
+std::string SourceCatalog::typeForUrl(const std::string& url) {
+    std::string text = trim(url);
+    std::size_t colon = text.find("://");
+    if (colon == std::string::npos) return "";
+    std::string scheme = lower(text.substr(0, colon));
+    if (scheme == "ftp" || scheme == "ftps") return "ftp";
+    if (scheme == "http" || scheme == "https") return "http";
+    return "";
+}
+
 Status SourceCatalog::add(ShopConfig source) {
+    source.name = trim(source.name);
+    source.url = trim(source.url);
+    source.username = trim(source.username);
     if (!writable_) return makeError(ErrorCode::PermissionDenied, "config.json is invalid: fix it first");
     if (source.name.empty()) return makeError(ErrorCode::InvalidArgument, "a source needs a name");
     for (const ShopConfig& other : config_.sources) {

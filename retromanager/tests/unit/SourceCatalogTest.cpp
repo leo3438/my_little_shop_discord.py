@@ -86,3 +86,24 @@ TEST(SourceCatalog, NeverOverwritesAConfigItCouldNotRead) {
     EXPECT_EQ(catalog.add(web()).error().code, ErrorCode::PermissionDenied);
     EXPECT_FALSE(fs.exists(kPath));
 }
+
+TEST(SourceCatalog, TypedSpacesAreTrimmed) {
+    Fixture f;
+    ShopConfig shop = web("  Web  ", "  https://retro.example.org/shop.json \n");
+    shop.username = " leo ";
+    ASSERT_TRUE(f.catalog->add(shop).ok());
+    AppConfig saved = f.saved();
+    EXPECT_EQ(saved.sources[1].name, "Web");
+    EXPECT_EQ(saved.sources[1].url, "https://retro.example.org/shop.json");
+    EXPECT_EQ(saved.sources[1].username, "leo");
+}
+
+TEST(SourceCatalog, TypeShownWhileTyping) {
+    EXPECT_EQ(SourceCatalog::typeForUrl("ftp://nas/shop/"), "ftp");
+    EXPECT_EQ(SourceCatalog::typeForUrl("FTPS://nas/"), "ftp");
+    EXPECT_EQ(SourceCatalog::typeForUrl("https://site/shop.json"), "http");
+    EXPECT_EQ(SourceCatalog::typeForUrl(" http://192.168.1.2:8080/"), "http");
+    EXPECT_EQ(SourceCatalog::typeForUrl("smb://nas/"), "");
+    EXPECT_EQ(SourceCatalog::typeForUrl("nas.local/shop"), "");
+    EXPECT_EQ(SourceCatalog::typeForUrl(""), "");
+}

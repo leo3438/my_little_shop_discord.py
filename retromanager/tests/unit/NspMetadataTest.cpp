@@ -162,12 +162,22 @@ TEST(NpdmTest, RejectsWhatIsNotAnNpdm) {
     EXPECT_FALSE(patchNpdmTitleId(badAcid, 1).ok());
 }
 
-TEST(TitleIdTest, StableHomebrewRange) {
+TEST(TitleIdTest, ApplicationFormat0100xxxxxxxx0000) {
     std::uint64_t a = forwarderTitleId("/roms/gba/Pokemon.gba");
-    EXPECT_EQ(a, forwarderTitleId("/roms/gba/Pokemon.gba"));
+    EXPECT_EQ(a, forwarderTitleId("/roms/gba/Pokemon.gba"));  // stable: regenerating replaces the same title
     EXPECT_NE(a, forwarderTitleId("/roms/gba/Zelda.gba"));
-    EXPECT_EQ(a >> 56, 0x05u);
-    EXPECT_EQ(a & 0xFFF, 0u);
-    EXPECT_NE(a & 0x00FFFFFFFFFFF000ull, 0u);
+    std::string hex = titleIdHex(a);
+    EXPECT_EQ(hex.substr(0, 4), "0100") << hex;
+    EXPECT_EQ(hex.substr(12), "0000") << hex;
+    EXPECT_EQ(a & 0xFFFF, 0u);
+    // Inside the application range 0x0100000000010000..0x01FFFFFFFFFFFFFF.
+    EXPECT_GE(a, 0x0100000000010000ull);
+    // Room for its update (+0x800) and add-ons (+0x1000...) without touching another forwarder.
+    for (int i = 0; i < 2000; ++i) {
+        std::uint64_t t = forwarderTitleId("/roms/gba/Game " + std::to_string(i) + ".gba");
+        ASSERT_EQ(t >> 48, 0x0100u);
+        ASSERT_EQ(t & 0xFFFF, 0u);
+        ASSERT_NE((t >> 16) & 0xFFFFFFFF, 0u);
+    }
     EXPECT_EQ(titleIdHex(0x0500000000abc000ull), "0500000000abc000");
 }

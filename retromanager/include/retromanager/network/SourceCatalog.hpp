@@ -26,11 +26,16 @@ class SourceCatalog {
     // Validates (unique name, usable ftp(s):// or http(s):// URL), creates
     // the client, saves. `type` empty = from the URL; verifyTls as given,
     // or the type's default when `type` was empty.
+    // Name, URL and user name are trimmed first (console keyboard input).
     Status add(ShopConfig source);
     Status remove(const std::string& name);
     Status activate(const std::string& name);
 
     const AppConfig& config() const { return config_; }
+
+    // "ftp" (ftp://, ftps://), "http" (http://, https://) or "" (anything
+    // else): what the add form shows while the address is typed.
+    static std::string typeForUrl(const std::string& url);
 
   private:
     Status save();

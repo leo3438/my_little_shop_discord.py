@@ -61,6 +61,10 @@ struct AppConfig {
     // cloud saves disabled. Uses the shop credentials when on the same server.
     std::string savesUrl;
     SysClkSettings sysclk;
+    // What the parser skipped or replaced in a hand-edited config.json
+    // ("sources[2] (\"Maison\"): unknown type \"smb\""...). Not saved,
+    // not compared: shown in the Sources screen and the log.
+    std::vector<std::string> warnings;
 
     // nullptr when there is no source at all.
     const ShopConfig* active() const {
