@@ -44,6 +44,9 @@ if (RM_WITH_SMB)
     )
     FetchContent_MakeAvailable(libsmb2)
     if (PLATFORM_SWITCH)
+        # Its Switch code paths (compat.c/.h, portable-endian.h) key on
+        # __SWITCH__, which Borealis only defines for its own targets.
+        target_compile_definitions(smb2 PRIVATE __SWITCH__)
         # Its Switch compat.h only includes <sys/types.h>, yet aes.h and
         # others use uint8_t: provide <stdint.h> to every libsmb2 source.
         target_compile_options(smb2 PRIVATE -include stdint.h)
