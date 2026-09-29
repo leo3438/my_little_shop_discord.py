@@ -1,5 +1,7 @@
 #include "retromanager/ui/ForwarderActivity.hpp"
 
+#include <algorithm>
+
 #include "retromanager/core/Format.hpp"
 #include "retromanager/forwarder/nsp/Metadata.hpp"
 #include "retromanager/models/Systems.hpp"
@@ -63,6 +65,7 @@ void ForwarderActivity::onContentAvailable() {
         return;
     }
 
+    brls::Logger::info("Forwarder: building {} ({}, {})", game_.title, game_.system, game_.id);
     statusLabel->setText(brls::getStr("retromanager/forwarder/working", game_.title));
     setOptionalText(detailsLabel, brls::getStr("retromanager/forwarder/working_hint"));
     std::weak_ptr<bool> alive = alive_;
@@ -82,9 +85,9 @@ void ForwarderActivity::onContentAvailable() {
 void ForwarderActivity::onBuilt(const ForwarderReport& report) {
     if (finished_) return;
     if (report.ok()) {
-        brls::Logger::info("Forwarder: {} ({}) -> {}, core {}", report.title, nsp::titleIdHex(report.titleId), report.nspPath,
-                           report.corePath);
-        std::string details = brls::getStr("retromanager/forwarder/done_details", report.nspPath + "  (" +
+        brls::Logger::info("Forwarder: {} ({}) written to sdmc:{} ({}), core {}", report.title, nsp::titleIdHex(report.titleId),
+                           report.nspPath, formatBytes(report.sizeBytes), report.corePath);
+        std::string details = brls::getStr("retromanager/forwarder/done_details", "sdmc:" + report.nspPath + "  (" +
                                            formatBytes(report.sizeBytes) + ")", report.corePath, report.romPath,
                                            nsp::titleIdHex(report.titleId));
         if (report.placeholderIcon) details += "\n" + brls::getStr("retromanager/forwarder/placeholder_icon");
@@ -92,16 +95,32 @@ void ForwarderActivity::onBuilt(const ForwarderReport& report) {
         finish(brls::getStr("retromanager/forwarder/done"), details);
         return;
     }
-    brls::Logger::warning("Forwarder for {} not created: issue {} ({})", game_.title, static_cast<int>(report.issue),
-                          report.detail);
-    finish(brls::getStr("retromanager/forwarder/failed"), describeIssue(report));
+    const std::string message = describeIssue(report);
+    if (report.issue == ForwarderIssue::Cancelled) {
+        brls::Logger::info("Forwarder for {}: cancelled", game_.title);
+        finish(brls::getStr("retromanager/forwarder/failed"), message);
+        return;
+    }
+    std::string oneLine = message;
+    std::replace(oneLine.begin(), oneLine.end(), '\n', ' ');
+    brls::Logger::error("Forwarder for {} not created: {} [{}]", game_.title, oneLine, report.detail);
+    finish(brls::getStr("retromanager/forwarder/failed"), message, true);
+
+    // Blocking: the reason must not go unnoticed on a TV across the room.
+    auto* dialog = new brls::Dialog(brls::getStr("retromanager/forwarder/failed") + "\n\n" + message + "\n\n" +
+                                    brls::getStr("retromanager/forwarder/log_hint"));
+    dialog->addButton(brls::getStr("retromanager/download/close"), [] {});
+    dialog->open();
 }
 
-void ForwarderActivity::finish(const std::string& status, const std::string& details) {
+void ForwarderActivity::finish(const std::string& status, const std::string& details, bool error) {
     finished_ = true;
     spinner->setVisibility(brls::Visibility::GONE);
+    brls::Theme theme = brls::Application::getTheme();
     statusLabel->setText(status);
+    statusLabel->setTextColor(error ? nvgRGB(255, 90, 90) : theme.getColor("brls/accent"));
     setOptionalText(detailsLabel, details);
+    detailsLabel->setTextColor(theme.getColor("brls/text"));  // the result must be readable, not greyed out
     actionButton->setText(brls::getStr("retromanager/download/close"));
     root->updateActionHint(brls::BUTTON_B, brls::getStr("retromanager/download/close"));
     root->setActionAvailable(brls::BUTTON_B, true);

@@ -7,6 +7,7 @@
 #include <random>
 
 #include "retromanager/core/FileName.hpp"
+#include "retromanager/core/Format.hpp"
 #include "retromanager/forwarder/IconMaker.hpp"
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/models/Systems.hpp"
@@ -203,6 +204,16 @@ ForwarderReport ForwarderBuilder::build(const GameEntry& game, const Cancellatio
     const Bytes& bytes = package.value();
     Status written = fs_.writeFile(output, std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     if (!written) return issue(ForwarderIssue::WriteFailed, written.error().describe());
+    // Read the card back: a write can report success and still not land
+    // (full or failing SD card), and the user would look for it in vain.
+    auto landed = fs_.stat(output);
+    if (!landed || landed.value().type != EntryType::File) {
+        return issue(ForwarderIssue::WriteFailed, output + " is not on the SD card after writing it");
+    }
+    if (landed.value().size != bytes.size()) {
+        return issue(ForwarderIssue::WriteFailed, output + ": " + formatBytes(landed.value().size) + " on the SD card instead of " +
+                                                      formatBytes(bytes.size()));
+    }
 
     report.nspPath = output;
     report.title = title;

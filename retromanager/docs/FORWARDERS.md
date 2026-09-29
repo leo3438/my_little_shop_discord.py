@@ -56,9 +56,25 @@ version figée), avec `tools/forwarder-stub/nx-hbloader.patch` :
 Pour le recompiler soi-même (devkitA64 + libnx) :
 `tools/forwarder-stub/build.sh <dossier de sortie>`.
 
-Si un fichier manque, l'écran le dit précisément, par exemple :
+Si un fichier manque, une fenêtre bloquante le dit précisément (le détail
+reste affiché sur l'écran après « Fermer »), par exemple :
 
-![Erreur : clés absentes (build desktop)](forwarder-error-desktop.png)
+![Erreur : core absent (build desktop)](forwarder-error-desktop.png)
+
+## Où est le NSP ? Que s'est-il passé ?
+
+- Le fichier est écrit dans **`sdmc:/nsp/<titre du jeu>.nsp`** (dossier `nsp`
+  à la racine de la carte, créé s'il n'existe pas). Le chemin exact et la
+  taille sont affichés à l'écran et dans le journal. Après l'écriture,
+  RetroManager relit la carte : un fichier absent ou tronqué est une erreur.
+- Chaque essai est écrit dans **`sdmc:/switch/RetroManager/logs/retromanager.log`** :
+  - `Forwarder: building <jeu> (...)` au début ;
+  - `Forwarder: <jeu> (<title id>) written to sdmc:/nsp/<jeu>.nsp (<taille>)` en cas de succès ;
+  - `Forwarder for <jeu> not created: <raison>` en cas d'échec ;
+  - `Forwarder for <jeu>: cancelled` si l'écran a été quitté (B) avant la fin.
+- Le journal est remplacé à chaque lancement : celui du lancement précédent
+  est gardé dans `retromanager.old.log`. Lisez-le sur PC (lecteur de carte,
+  FTP ou MTP avec DBI) ou avec l'éditeur de texte de NX-Shell.
 
 Les clés ne sont jamais recopiées, envoyées ni écrites dans les journaux.
 

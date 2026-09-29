@@ -217,6 +217,7 @@
         "error_rom_missing": "La ROM n'est plus sur la carte SD :\n{}",
         "error_core_missing": "Aucun core RetroArch pour ce système dans {}/.\nInstallez l'un de ceux-ci (Mise à jour en ligne de RetroArch) : {}",
         "error_write": "Impossible d'écrire le fichier dans /nsp/ : {}",
-        "error_generic": "La génération a échoué : {}"
+        "error_generic": "La génération a échoué : {}",
+        "log_hint": "Journal : sdmc:/switch/RetroManager/logs/retromanager.log"
     }
 }

@@ -54,6 +54,22 @@ const std::string kRom = "/roms/gba/Tom _ Jerry (USA).gba";
 const std::string kBoxArt = "/retroarch/thumbnails/Nintendo - Game Boy Advance/Named_Boxarts/Tom _ Jerry (USA).png";
 const std::string kCore = "/retroarch/cores/mgba_libretro_libnx.nro";
 
+// The SD card as seen after writing: what a console could do when the
+// write "succeeds" but the file does not land (full card, FAT error...).
+class CheckedFileSystem : public test::MemoryFileSystem {
+  public:
+    enum class Nsp { Normal, Missing, Truncated };
+    Nsp nsp = Nsp::Normal;
+
+    Result<FileInfo> stat(std::string_view path) override {
+        const bool isNsp = path.size() > 4 && path.substr(path.size() - 4) == ".nsp";
+        if (isNsp && nsp == Nsp::Missing) return makeError(ErrorCode::NotFound, std::string(path));
+        auto info = test::MemoryFileSystem::stat(path);
+        if (isNsp && nsp == Nsp::Truncated && info) info.value().size = 1;
+        return info;
+    }
+};
+
 struct Recorder {
     int calls = 0;
     nsp::ApplicationSpec spec;
@@ -94,7 +110,7 @@ class ForwarderBuilderTest : public ::testing::Test {
         return "<missing>";
     }
 
-    test::MemoryFileSystem fs;
+    CheckedFileSystem fs;
     Recorder recorder;
     CancellationToken cancel;
 };
@@ -131,6 +147,18 @@ TEST_F(ForwarderBuilderTest, InjectsTitleIconAndLaunchArguments) {
     EXPECT_EQ(report.romPath, kRom);
     EXPECT_EQ(report.titleId, spec.titleId);
     EXPECT_EQ(report.sizeBytes, 3u);
+}
+
+TEST_F(ForwarderBuilderTest, NspThatDoesNotLandOnTheCardIsAnError) {
+    fs.nsp = CheckedFileSystem::Nsp::Missing;
+    ForwarderReport report = builder(recorder.packager()).build(gbaGame(), cancel);
+    EXPECT_EQ(report.issue, ForwarderIssue::WriteFailed);
+    EXPECT_NE(report.detail.find("/nsp/Tom & Jerry.nsp"), std::string::npos) << report.detail;
+
+    fs.nsp = CheckedFileSystem::Nsp::Truncated;
+    report = builder(recorder.packager()).build(gbaGame(), cancel);
+    EXPECT_EQ(report.issue, ForwarderIssue::WriteFailed);
+    EXPECT_NE(report.detail.find("1 B"), std::string::npos) << report.detail;
 }
 
 TEST_F(ForwarderBuilderTest, MissingKeysSaysWhereToPutThem) {

@@ -33,7 +33,7 @@ class ForwarderActivity : public brls::Activity {
 
   private:
     void onBuilt(const ForwarderReport& report);
-    void finish(const std::string& status, const std::string& details);
+    void finish(const std::string& status, const std::string& details, bool error = false);
     bool onBack();
 
     ForwarderTools tools_;
