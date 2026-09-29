@@ -31,7 +31,7 @@ contredit, on modifie d'abord ce document.
 ```mermaid
 graph TD
     UI["ui/ : Activities & vues Borealis"]
-    SVC["services/ : ShopService ✅, DownloadService ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
+    SVC["services/ : ShopService ✅, DownloadQueueManager ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
     PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgDocument ✅, IniParser, ChtParser"]
     FS["fs/ : FileInstall ✅, RomStore ✅"]
     NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SourceFactory ✅, SmbClient, HttpClient"]
@@ -108,8 +108,11 @@ liront les vrais chemins dans `retroarch.cfg`.
   fichier de transit caché, `/roms/nds/.Jeu.nds.tmp` (masqué dans les
   listings), renommé sur la cible seulement au `close()`. Détruire le flux
   sans `close()` supprime le `.tmp`. Un crash, une annulation ou une coupure
-  réseau ne laisse jamais de ROM tronquée ni de save corrompue ; un `.tmp`
-  resté après une coupure de courant est écrasé à la tentative suivante.
+  réseau ne laisse jamais de ROM tronquée ni de save corrompue.
+- **Écritures reprenables** (Phase 8) : `suspend()` ferme le flux en gardant
+  le `.tmp` (toujours caché, jamais publié) ; `openWrite(path, {resume})`
+  le rouvre en ajout et `resumedFrom()` donne sa taille. Un `openWrite`
+  normal repart de zéro. Couvert par la suite de contrat (mémoire et disque).
 - `availableSpace(path)` : espace libre du volume (`Unsupported` si la
   plateforme ne sait pas le dire ; l'appelant continue alors sans contrôle).
 - Codes d'erreur normalisés (`NotFound`, `NotADirectory`, `IsADirectory`,
@@ -185,9 +188,9 @@ Format de l'index : [docs/INDEX_FORMAT.md](docs/INDEX_FORMAT.md).
 
 ```mermaid
 sequenceDiagram
-    participant UI as DownloadActivity (ui)
+    participant UI as DownloadsActivity (ui)
     participant B as EventBus (core)
-    participant D as DownloadService (services, WorkerThread)
+    participant D as DownloadQueueManager (services, WorkerThread)
     participant F as RomStore → IFileSystem (fs/platform)
     participant R as IRemoteSource (network)
     UI->>B: subscribe(Started / Progressed / Finished)
@@ -215,14 +218,14 @@ sur Switch, rien sur desktop). Il est relâché sur tous les chemins de sortie
 (succès, erreur, annulation, refus faute d'espace).
 
 **Étapes post-installation** (`services/PostInstallStep.hpp`) :
-`DownloadService` exécute, dans l'ordre, les `IPostInstallStep` enregistrés
+`DownloadQueueManager` exécute, dans l'ordre, les `IPostInstallStep` enregistrés
 dans `main.cpp`, une fois la ROM validée sur la carte. Une étape en échec ne
 défait jamais l'installation : son erreur est rapportée à côté.
 
 | Étape | Effet |
 |---|---|
 | `EmulatorConfigurator` | `rgui_browser_directory` de `retroarch.cfg` pointe sur le dossier de la ROM (`/roms/nds/`). Édition via `CfgDocument` : seule la valeur change, tout le reste du fichier est conservé octet pour octet. Copie `retroarch.cfg.rmbak` avant la première modification ; fichier créé s'il n'existe pas ; rien si RetroArch n'est pas installé. |
-| `PlaylistManager` | Ajoute le jeu à `<playlist_directory>/<système libretro>.lpl` (JSON RetroArch ; l'ancien format à 6 lignes est lu puis converti) : chemin, libellé = nom de la ROM sans extension, cœur `DETECT`, CRC-32 **mesuré pendant le téléchargement** (`DownloadService` le transmet aux étapes). `PlaylistDocument` conserve tout ce que RetroArch a écrit (champs inconnus, ordre des clés, autres entrées) ; une entrée existante pour le même fichier est mise à jour, jamais dupliquée ; copie `.lpl.rmbak` ; playlist illisible = laissée intacte (`ParseError`). |
+| `PlaylistManager` | Ajoute le jeu à `<playlist_directory>/<système libretro>.lpl` (JSON RetroArch ; l'ancien format à 6 lignes est lu puis converti) : chemin, libellé = nom de la ROM sans extension, cœur `DETECT`, CRC-32 **mesuré pendant le téléchargement** (`DownloadQueueManager` le transmet aux étapes). `PlaylistDocument` conserve tout ce que RetroArch a écrit (champs inconnus, ordre des clés, autres entrées) ; une entrée existante pour le même fichier est mise à jour, jamais dupliquée ; copie `.lpl.rmbak` ; playlist illisible = laissée intacte (`ParseError`). |
 | `ThumbnailManager` | Si l'entrée a une jaquette (`boxart` / `url_boxart`) : PNG vérifié (signature), 8 Mio max, écrit dans `<thumbnails_directory>/<système libretro>/Named_Boxarts/<libellé>.png` avec la règle de nommage de RetroArch (`&` `*` `/` `:` `<` `>` `?` `\` `\|` et l'accent grave deviennent `_`). |
 | `CheatManager` | Si l'entrée a un `cheat_url` : télécharge le `.cht` (1 Mio max, validé comme fichier de triche RetroArch) dans `<cheat_database_path>/<système libretro>/<nom de la ROM>.cht`. |
 | `SysClkConfigurator` | Pour un jeu N64 ou PlayStation (pas la 3DS, qui tourne dans Citra autonome) : section `[<title id>]` de `/config/sys-clk/config.ini` avec `handheld_cpu=1785` et `docked_cpu=1785`. Édition via `IniDocument` (sections, commentaires `;`/`#`, sans perte), copie `config.ini.rmbak`, idempotent ; `NotFound` si sys-clk n'est pas installé (`/config/sys-clk` absent). Title id configurable (`sysclk.title_id`, défaut `010000000000100D`, l'applet Album dans lequel tourne un `.nro` lancé depuis hbmenu), étape désactivable (`sysclk.enabled`). |
@@ -232,7 +235,7 @@ d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
 d'intégration mesure la mémoire résidente pendant un téléchargement de
 64 Mio : environ +1,2 Mio (échec au-delà de 16 Mio).
 
-**Téléchargements génériques** (Phase 7) : `DownloadService` exécute des
+**Téléchargements génériques** (Phase 7) : `DownloadQueueManager` exécute des
 `DownloadJob` (titre, URL, destination, et trois fonctions : `begin` crée le
 `FileInstall`, `afterInstall` fait le travail qui suit avec le CRC mesuré,
 `onFailed` range ce que le job a créé). `start(GameEntry)` construit le job
@@ -338,8 +341,9 @@ version, description, `url_nro`, `url_icon`, dossier). `AppManager` :
   absente de l'index : demandée au serveur (listing) pour que le contrôle
   d'espace ait lieu. Échec d'une première installation : le dossier vide
   est supprimé (pas de dossier fantôme dans hbmenu).
-- **Après** : l'icône (`/switch/<dossier>/icon.jpg`, JPEG vérifié, 2 Mio
-  max ; un échec n'annule pas l'installation), puis la version installée est
+- **Après** : l'icône (`/switch/<dossier>/<dossier>.jpg`, le nom que hbmenu
+  cherche pour un `.nro` sans icône intégrée, et une copie `icon.jpg` ; JPEG
+  vérifié, 2 Mio max ; un échec n'annule pas l'installation), puis la version installée est
   notée dans `/switch/RetroManager/apps.json`.
 - **État** : non installé, installé (`.nro` présent ; version inconnue si
   installé à la main), mise à jour disponible (version notée ≠ version de
@@ -347,15 +351,68 @@ version, description, `url_nro`, `url_icon`, dossier). `AppManager` :
 
 `AppsListActivity` : deux sections (Émulateurs, Homebrews), version et
 auteur sous le titre, tag « INSTALLÉ » / « MISE À JOUR » rafraîchi après
-chaque téléchargement ; `DownloadActivity` (générique) affiche « Application
-installée dans /switch/... ».
+chaque téléchargement ; le bilan affiche « Application installée dans
+/switch/... ».
 
-### 4.7 Asynchronisme
+### 4.7 Flux implémenté (Phase 8) : file d'attente et reprise
+
+`DownloadQueueManager` (ex-`DownloadService`) est la file unique de l'app :
+un clic sur un jeu ou une application **ajoute** un `DownloadJob` et rend la
+main immédiatement ; l'UI n'attend jamais.
+
+```mermaid
+sequenceDiagram
+    participant UI as Listes / DownloadsActivity (thread UI)
+    participant Q as DownloadQueueManager
+    participant W as WorkerThread (drain)
+    UI->>Q: start(job) : ajouté en fin de file (doublon ignoré)
+    Q-->>UI: DownloadQueueChanged{snapshot}
+    Q->>W: drain() posté si aucun n'est en cours
+    loop tant que la file n'est pas vide (anti-veille tenu tout du long)
+        W->>W: dépile, état Running, DownloadQueueChanged
+        W->>W: run(job) : Started, Progressed (10/s), Configuring, Finished
+    end
+    UI->>Q: cancel(id) : en attente = retiré ; en cours = token annulé
+```
+
+- **Un seul transfert à la fois**, dans l'ordre d'ajout. Un élément ajouté
+  pendant qu'un autre tourne (même depuis un handler d'événement) rejoint
+  la même boucle.
+- **Anti-veille** : pris au premier élément, rendu quand la file est vide
+  (pas de fenêtre de mise en veille entre deux éléments).
+- **État lisible de partout** : `snapshot()` (en cours puis en attente, avec
+  progression), `history()` (30 derniers résultats, avec les étapes),
+  `isQueued(itemId)` pour les tags « EN FILE ». Tout est protégé par un
+  mutex ; les événements sont livrés sur le thread principal par l'EventBus.
+- **Reprise** : `begin()` rouvre le `.tmp` d'une tentative interrompue ;
+  `FileInstall` relit une fois ses octets pour que le CRC-32 porte sur le
+  fichier entier (et revérifie l'en-tête NRO) ; puis
+  `IRemoteSource::downloadFileFrom(offset)` : `REST <offset>` avant `RETR`
+  côté FTP (`CURLOPT_RESUME_FROM_LARGE`). Serveur qui refuse (ou offset
+  au-delà de la fin) : `Unsupported`, le `.tmp` est vidé et le fichier
+  retéléchargé depuis le début. Un `.tmp` déjà complet est simplement
+  vérifié.
+- **Que garde-t-on ?** Coupure réseau ou fermeture de l'app : le `.tmp` est
+  gardé (`suspend()`) pour la reprise. Annulation par l'utilisateur, CRC ou
+  en-tête faux, carte pleine : il est supprimé. Si le fichier du NAS a
+  changé entre-temps, le CRC (quand l'index le donne) détecte le mélange et
+  le fichier est retéléchargé proprement à la tentative suivante.
+
+UI : `DownloadsActivity` (en cours avec barre, pourcentage, débit et
+« reprise à … » ; en attente, A retire ; terminés, A affiche le bilan ;
+X annule l'élément en cours). Les listes ne sont reconstruites que quand
+leur contenu change, avec le focus replacé sur la même ligne ; la
+progression ne met à jour que des libellés. `DownloadNotifier` affiche
+« Installé : … » / « Échec : … » quel que soit l'écran. Accueil : bouton
+« Téléchargements (N) » ; boutique et App Store : Y ; App Store : bouton
+« Mettre à jour N applications ».
+
+### 4.8 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
     courtes (chargement de l'index) ;
-  - `WorkerThread`, un thread dédié possédé par `DownloadService` (et un
+  - `WorkerThread`, un thread dédié possédé par `DownloadQueueManager` (et un
     autre par `CloudSyncService` et par `BiosManager`), pour les
     téléchargements et la synchro :
     ils durent des minutes et ne doivent pas bloquer la
@@ -375,11 +432,11 @@ installée dans /switch/... ».
   cloud). `publish()` depuis n'importe quel thread ; les handlers tournent
   toujours sur le thread principal ; une `Subscription` détruite n'est plus
   jamais appelée, même pour un événement déjà en file.
-- `DownloadService`, `CloudSyncService` et `BiosManager` possèdent leur `WorkerThread` :
+- `DownloadQueueManager`, `CloudSyncService` et `BiosManager` possèdent leur `WorkerThread` :
   leur destructeur annule tout et attend la fin du transfert en cours. Dans
   `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.8 Gestion des erreurs
+### 4.9 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -395,7 +452,7 @@ traverse une frontière de couche (le parser attrape celles de nlohmann/json).
    `.cfg`, synchronisation, parsing des listings FTP).
 2. **Unitaires** (`tests/unit`) : `MemoryFileSystem` et fakes, rapides.
 3. **Contrat** : une suite par interface, exécutée sur chaque implémentation.
-4. **Intégration** (`tests/integration`) : `FtpClient` → `DownloadService` →
+4. **Intégration** (`tests/integration`) : `FtpClient` → `DownloadQueueManager` →
    `RomStore` → disque, contre un vrai serveur local
    (`tools/test_ftp_server.py`, pyftpdlib) servant `tests/fixtures/ftp_root`
    plus une ROM générée de 64 Mio avec son CRC, et un second serveur **FTPS**
@@ -440,4 +497,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 5 | Envoi FTP en flux + listing (MLSD / NLST), `CloudSyncService` (manifeste, conflits sans perte), `IniDocument`, `SysClkConfigurator`, écran « Synchroniser les sauvegardes » | ✅ |
 | 6 | Playlists RetroArch (`PlaylistDocument`, `PlaylistManager`), jaquettes (`ThumbnailManager`), BIOS (catalogue, MD5, section `bios` de l'index, `BiosManager`, écran « Vérification des BIOS »), sys-clk sur l'applet Album | ✅ |
 | 7 | App Store personnel : sections `apps` / `emulators`, `AppManager` (`/switch/<nom>/<nom>.nro`, en-tête NRO, `icon.jpg`, versions installées), pipeline de téléchargement générique (`FileInstall`, `DownloadJob`), écran « Émulateurs & Homebrews » | ✅ |
-| 8+ | File de téléchargements, sources HTTP/SMB, scraping automatique (bases libretro), forwarders | — |
+| 8 | File de téléchargements (`DownloadQueueManager`, écran « Téléchargements »), reprise FTP `REST` (écritures reprenables dans `IFileSystem`), « Mettre à jour N applications », icône `<nom>.jpg` | ✅ |
+| 9+ | Sources HTTP/SMB, scraping automatique (bases libretro), forwarders, file persistante entre deux lancements | — |

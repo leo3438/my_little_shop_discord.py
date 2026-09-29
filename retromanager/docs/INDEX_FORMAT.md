@@ -139,7 +139,7 @@ renseignez `system`. Liste de référence : `src/models/Systems.cpp`.
 | `author` | chaîne | vide |
 | `version` | chaîne libre (`1.19.1`, `v2.0-beta`) : comparée à la version installée pour afficher « MISE À JOUR » | vide (pas de détection) |
 | `description` | chaîne | vide |
-| `url_icon` | chaîne (URL) d'une icône **JPEG** (256×256 conseillé), installée en `/switch/<dossier>/icon.jpg` | vide |
+| `url_icon` | chaîne (URL) d'une icône **JPEG** (256×256 conseillé), installée en `/switch/<dossier>/<dossier>.jpg` (le nom que hbmenu cherche) et en `icon.jpg` | vide |
 | `folder` | nom du dossier et du `.nro` | le titre, rendu sûr pour FAT |
 | `size` | entier ≥ 0, en octets | demandée au serveur au moment du téléchargement |
 | `crc32` | 8 chiffres hexadécimaux, vérifié | vide |

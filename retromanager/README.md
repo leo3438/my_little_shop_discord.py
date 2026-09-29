@@ -8,6 +8,7 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Synchronisation des sauvegardes (build desktop)](docs/sync-desktop.png)
 ![Vérification des BIOS (build desktop)](docs/bios-desktop.png)
 ![Émulateurs & Homebrews (build desktop)](docs/apps-desktop.png)
+![File de téléchargements (build desktop)](docs/downloads-desktop.png)
 
 Après chaque téléchargement, RetroManager intègre le jeu à RetroArch : il
 l'ajoute à la playlist de son système (il apparaît directement dans le menu
@@ -19,6 +20,11 @@ aussi sys-clk (CPU à 1785 MHz pour RetroArch).
 L'écran « Émulateurs & Homebrews » est un App Store personnel : il installe
 les `.nro` de votre NAS (RetroArch, melonDS, pNES…) dans
 `/switch/<nom>/<nom>.nro`, avec leur icône, et signale les mises à jour.
+
+Tous les téléchargements passent par une file : un clic ajoute le jeu ou
+l'application, la file les traite un par un en arrière-plan (écran
+« Téléchargements » : progression, retrait, annulation), et un
+téléchargement coupé reprend là où il s'était arrêté (FTP `REST`).
 
 L'écran « Vérification des BIOS » liste les BIOS attendus par les cœurs
 (GBA, PlayStation, DS…), vérifie leur MD5 et télécharge ceux qui manquent
@@ -61,7 +67,7 @@ python3 tools/test_ftp_server.py --port 2121 --throttle-kbps 8192 &
 cmake --preset desktop && cmake --build --preset desktop
 ./build/desktop/RetroManager           # -d : logs debug, -v : vue de debug
 
-# Sur desktop : Entrée = A, Échap = B, clic milieu = X
+# Sur desktop : Entrée = A, Échap = B, clic milieu = X (pas de Y au clavier : passez par l'accueil)
 # Interface en français (sur Switch : langue de la console)
 RETROMANAGER_LANG=fr ./build/desktop/RetroManager
 
