@@ -15,16 +15,20 @@ std::string lower(std::string value) {
     return value;
 }
 
-// "ftp" and "ftps" reach the same NAS (explicit TLS on the same port).
+// "ftp" and "ftps" reach the same NAS (explicit TLS on the same port). An
+// SMB server is one source per share (each may have its own account).
 struct ServerKey {
     std::string family;
     std::string host;
     std::uint16_t port = 0;
-    bool operator==(const ServerKey& o) const { return family == o.family && host == o.host && port == o.port; }
+    std::string share;  // smb only, lowercase
+    bool operator==(const ServerKey& o) const {
+        return family == o.family && host == o.host && port == o.port && share == o.share;
+    }
 };
 
 std::optional<ServerKey> serverOf(const std::string& address) {
-    auto parts = url::split(address);
+    auto parts = url::split(url::encodeForTransfer(address));
     if (!parts) return std::nullopt;
     const std::string scheme = parts.value().scheme;
     ServerKey key;
@@ -35,6 +39,11 @@ std::optional<ServerKey> serverOf(const std::string& address) {
     } else if (scheme == "http" || scheme == "https") {
         key.family = scheme;  // http and https are different servers (and trust levels)
         key.port = parts.value().port.value_or(scheme == "https" ? 443 : 80);
+    } else if (scheme == "smb") {
+        key.family = "smb";
+        key.port = parts.value().port.value_or(445);
+        std::string path = url::percentDecode(parts.value().path);
+        key.share = lower(path.substr(1, path.find('/', 1) == std::string::npos ? std::string::npos : path.find('/', 1) - 1));
     } else {
         return std::nullopt;
     }

@@ -14,6 +14,7 @@ constexpr std::size_t kCharsPerLine = 80;
 std::string typeName(const std::string& type) {
     if (type == "http") return brls::getStr("retromanager/sources/type_http");
     if (type == "ftp") return brls::getStr("retromanager/sources/type_ftp");
+    if (type == "smb") return brls::getStr("retromanager/sources/type_smb");
     return "";
 }
 

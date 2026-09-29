@@ -11,6 +11,7 @@ namespace {
 std::string typeLabel(const std::string& type) {
     if (type == "http") return brls::getStr("retromanager/sources/type_http");
     if (type == "mock") return brls::getStr("retromanager/sources/type_mock");
+    if (type == "smb") return brls::getStr("retromanager/sources/type_smb");
     return brls::getStr("retromanager/sources/type_ftp");
 }
 

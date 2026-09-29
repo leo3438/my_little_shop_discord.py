@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-openssl-dev
+          sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-openssl-dev samba smbclient
           pip install pyftpdlib pyopenssl
       - name: Configure
         run: cmake --preset tests -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
@@ -34,6 +34,10 @@ jobs:
           echo "RM_TEST_FTP_PORT=$(cat "$RUNNER_TEMP/ftp.port")" >> "$GITHUB_ENV"
           echo "RM_TEST_FTPS_PORT=$(cat "$RUNNER_TEMP/ftps.port")" >> "$GITHUB_ENV"
           echo "RM_TEST_HTTP_PORT=$(cat "$RUNNER_TEMP/http.port")" >> "$GITHUB_ENV"
+      - name: Start the test SMB server (Samba defaults, SMB2 minimum like a NAS)
+        run: |
+          sudo tools/test_smb_server.sh 4450 /tmp/rm-smb
+          echo "RM_TEST_SMB_PORT=4450" >> "$GITHUB_ENV"
       - name: Build hactool (independent check of the generated NSPs)
         run: |
           git clone https://github.com/SciresM/hactool.git "$RUNNER_TEMP/hactool"
@@ -41,7 +45,7 @@ jobs:
           cp "$RUNNER_TEMP/hactool/config.mk.template" "$RUNNER_TEMP/hactool/config.mk"
           make -C "$RUNNER_TEMP/hactool" -j"$(nproc)"
           echo "RM_HACTOOL=$RUNNER_TEMP/hactool/hactool" >> "$GITHUB_ENV"
-      - name: Test (FTP/FTPS/HTTP integration and hactool check included)
+      - name: Test (FTP/FTPS/HTTP/SMB integration and hactool check included)
         run: ctest --preset tests
 
   tests-bundled-curl:

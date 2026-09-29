@@ -27,6 +27,24 @@ FetchContent_MakeAvailable(stb)
 add_library(rm_stb INTERFACE)
 target_include_directories(rm_stb SYSTEM INTERFACE ${stb_SOURCE_DIR})
 
+# libsmb2: SMB2/3 client (LGPL-2.1, static). libcurl only speaks SMB1,
+# which Samba (NAS such as ZimaOS, Synology...) disables by default. Built
+# without Kerberos/GSSAPI (NTLM user/password is what home NAS use) and
+# without the DCE/RPC library. Supports the Switch through the devkitPro
+# toolchain. Pinned to a commit (the project tags rarely).
+if (RM_WITH_SMB)
+    set(ENABLE_LIBKRB5 OFF CACHE BOOL "" FORCE)
+    set(ENABLE_GSSAPI OFF CACHE BOOL "" FORCE)
+    set(ENABLE_LIBDCERPC OFF CACHE BOOL "" FORCE)
+    set(ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(libsmb2
+        GIT_REPOSITORY https://github.com/sahlberg/libsmb2.git
+        GIT_TAG c796ab389328d597ea2135717092d3802015f91f
+    )
+    FetchContent_MakeAvailable(libsmb2)
+endif ()
+
 if (RM_BUILD_TESTS)
     FetchContent_Declare(googletest
         GIT_REPOSITORY https://github.com/google/googletest.git

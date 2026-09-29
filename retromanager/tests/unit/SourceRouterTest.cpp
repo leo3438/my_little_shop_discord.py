@@ -115,3 +115,17 @@ TEST(SourceRouter, ReplaceKeepsThePlaceAndTheActiveMark) {
     EXPECT_FALSE(f.router.replace("missing", "X", "ftp", renamed));
     EXPECT_FALSE(f.router.replace("Salon", "web", "ftp", renamed));  // name taken by another source
 }
+
+TEST(SourceRouter, SmbUrlsGoToTheSourceOfTheirShare) {
+    auto media = mock("smb://nas.local:445/Media/shop.json", "Media");
+    auto games = mock("smb://nas.local:445/Games/index.json", "Games");
+    media->addFile("smb://nas.local:445/Media/a.nds", "media");
+    games->addFile("smb://nas.local:445/Games/b.nds", "games");
+    SourceRouter router;
+    router.add("Media", "smb", media);
+    router.add("Games", "smb", games);
+    EXPECT_EQ(get(router, "smb://nas.local:445/Media/a.nds").value(), "media");
+    EXPECT_EQ(router.route("smb://NAS.local/games/b.nds"), games);  // default port, share names ignore case
+    EXPECT_EQ(router.route("smb://nas.local/Media/roms ds/x.nds"), media);
+    EXPECT_EQ(get(router, "smb://nas.local:445/Other/c.nds").error().code, ErrorCode::PermissionDenied);
+}

@@ -57,7 +57,7 @@ TEST(SourceCatalog, RefusesBadSourcesAndSavesNothing) {
     EXPECT_EQ(f.catalog->add(web("nas")).error().code, ErrorCode::InvalidArgument);           // name taken (any case)
     EXPECT_EQ(f.catalog->add(web("")).error().code, ErrorCode::InvalidArgument);              // no name
     EXPECT_EQ(f.catalog->add(web("X", "nas.local/shop")).error().code, ErrorCode::InvalidArgument);  // not a URL
-    EXPECT_EQ(f.catalog->add(web("X", "smb://nas/shop")).error().code, ErrorCode::Unsupported);
+    EXPECT_EQ(f.catalog->add(web("X", "dav://nas/shop")).error().code, ErrorCode::Unsupported);
     EXPECT_FALSE(f.fs.exists(kPath));
     EXPECT_EQ(f.router.sources().size(), 1u);
 }
@@ -103,7 +103,8 @@ TEST(SourceCatalog, TypeShownWhileTyping) {
     EXPECT_EQ(SourceCatalog::typeForUrl("FTPS://nas/"), "ftp");
     EXPECT_EQ(SourceCatalog::typeForUrl("https://site/shop.json"), "http");
     EXPECT_EQ(SourceCatalog::typeForUrl(" http://192.168.1.2:8080/"), "http");
-    EXPECT_EQ(SourceCatalog::typeForUrl("smb://nas/"), "");
+    EXPECT_EQ(SourceCatalog::typeForUrl("smb://nas/"), "smb");
+    EXPECT_EQ(SourceCatalog::typeForUrl("dav://nas/"), "");
     EXPECT_EQ(SourceCatalog::typeForUrl("nas.local/shop"), "");
     EXPECT_EQ(SourceCatalog::typeForUrl(""), "");
 }
@@ -160,4 +161,22 @@ TEST(SourceCatalog, RefusedUpdatesChangeNothing) {
     ShopConfig same = f.config.sources[1];
     same.username = "x";
     EXPECT_TRUE(f.catalog->update("WEB", same).ok());
+}
+
+TEST(SourceCatalog, SmbSourcesAreDetectedAndChecked) {
+    EXPECT_EQ(SourceCatalog::typeForUrl("smb://192.168.1.102/HDD-Storage1/"), "smb");
+    EXPECT_EQ(SourceCatalog::typeForUrl("SMB://nas/Share/"), "smb");
+    Fixture f;
+    ShopConfig zima = web("ZimaOS", "smb://192.168.1.102/HDD-Storage1/roms ds/shop.json");
+    zima.username = "leo";
+    zima.password = "pw";
+    Status added = f.catalog->add(zima);
+    ASSERT_TRUE(added.ok()) << added.error().describe();
+    EXPECT_EQ(f.saved().sources[1].type, "smb");
+    EXPECT_EQ(f.router.sources()[1].type, "smb");
+    EXPECT_NE(f.router.sources()[1].description.find("smb://leo@192.168.1.102:445/HDD-Storage1/roms ds/shop.json"),
+              std::string::npos)
+        << f.router.sources()[1].description;
+    // A share is required.
+    EXPECT_EQ(f.catalog->add(web("Bad", "smb://192.168.1.102/")).error().code, ErrorCode::InvalidArgument);
 }

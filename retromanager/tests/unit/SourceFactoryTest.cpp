@@ -138,3 +138,23 @@ TEST(SourceFactory, UnconfiguredSourceReportsWhyEverywhere) {
     ASSERT_FALSE(download.ok());
     EXPECT_EQ(download.error().code, ErrorCode::NotConfigured);
 }
+
+TEST(SourceFactory, SmbSourcesAndSaves) {
+    ShopConfig zima;
+    zima.name = "ZimaOS";
+    zima.type = "smb";
+    zima.url = "smb://192.168.1.102/HDD-Storage1/roms ds/";
+    zima.username = "leo";
+    zima.password = "pw";
+    auto source = createRemoteSource(zima);
+    EXPECT_EQ(source->indexUrl(), "smb://192.168.1.102:445/HDD-Storage1/roms%20ds/index.json");
+
+    AppConfig config;
+    config.sources = {zima};
+    config.activeSource = "ZimaOS";
+    config.savesUrl = "smb://192.168.1.102/HDD-Storage1/Saves";
+    SavesSource saves = createSavesSource(config);
+    EXPECT_EQ(saves.baseUrl, "smb://192.168.1.102:445/HDD-Storage1/Saves/");
+    EXPECT_NE(saves.source->describe().find("leo@"), std::string::npos) << saves.source->describe();  // the shop's credentials
+    EXPECT_EQ(saves.source->describe().find("pw"), std::string::npos);
+}

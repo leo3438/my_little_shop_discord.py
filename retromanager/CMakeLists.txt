@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.22)
 option(RM_BUILD_APP "Build the Borealis application" ON)
 option(RM_BUILD_TESTS "Build the unit tests (desktop only)" OFF)
 option(RM_WITH_CURL "Build the libcurl-based network clients (FtpClient)" ON)
+option(RM_WITH_SMB "Build the SMB2/3 client (SmbClient, libsmb2)" ON)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -98,6 +99,16 @@ target_compile_definitions(retromanager_core PUBLIC RM_VERSION="${PROJECT_VERSIO
 target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
 
 # ---------------------------------------------------------------------------
+# retromanager_smb: SMB2/3 client backed by libsmb2 (independent of curl).
+# ---------------------------------------------------------------------------
+if (RM_WITH_SMB)
+    add_library(retromanager_smb STATIC src/network/SmbClient.cpp)
+    target_link_libraries(retromanager_smb PUBLIC retromanager_core PRIVATE smb2)
+    target_compile_definitions(retromanager_smb PUBLIC RM_WITH_SMB)
+    target_compile_options(retromanager_smb PRIVATE ${RM_WARNINGS})
+endif ()
+
+# ---------------------------------------------------------------------------
 # retromanager_curl: network clients backed by libcurl. Kept out of the core
 # so the core stays dependency-free.
 # ---------------------------------------------------------------------------
@@ -110,6 +121,9 @@ if (RM_WITH_CURL)
         src/network/SourceCatalog.cpp
         src/network/SourceFactory.cpp)
     target_link_libraries(retromanager_curl PUBLIC retromanager_core PRIVATE CURL::libcurl)
+    if (RM_WITH_SMB)
+        target_link_libraries(retromanager_curl PUBLIC retromanager_smb)  # SourceFactory creates SmbClient too
+    endif ()
     target_compile_options(retromanager_curl PRIVATE ${RM_WARNINGS})
 endif ()
 
@@ -158,6 +172,9 @@ if (RM_BUILD_APP)
     if (RM_WITH_CURL)
         target_link_libraries(${PROJECT_NAME} PRIVATE retromanager_curl)
         target_compile_definitions(${PROJECT_NAME} PRIVATE RM_WITH_CURL)
+    endif ()
+    if (RM_WITH_SMB)
+        target_link_libraries(${PROJECT_NAME} PRIVATE retromanager_smb)
     endif ()
     if (PLATFORM_DESKTOP)
         target_compile_definitions(${PROJECT_NAME} PRIVATE

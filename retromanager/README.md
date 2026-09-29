@@ -23,7 +23,9 @@ L'écran « Émulateurs & Homebrews » est un App Store personnel : il installe
 les `.nro` de votre NAS (RetroArch, melonDS, pNES…) dans
 `/switch/<nom>/<nom>.nro`, avec leur icône, et signale les mises à jour.
 
-Les boutiques peuvent être un NAS (FTP/FTPS) ou un site web (HTTP/HTTPS),
+Les boutiques peuvent être un partage SMB (Windows, ZimaOS, Synology… en
+SMB2/3, sans rien installer sur le NAS), un NAS en FTP/FTPS ou un site web
+(HTTP/HTTPS),
 plusieurs à la fois (écran « Sources ») ; sans jaquette dans l'index,
 RetroManager va la chercher sur le serveur de vignettes libretro.
 
@@ -101,6 +103,8 @@ python3 tools/test_ftp_server.py --port-file /tmp/ftp.port --ftps-port-file /tmp
     --http-port-file /tmp/http.port &
 RM_TEST_FTP_PORT=$(cat /tmp/ftp.port) RM_TEST_FTPS_PORT=$(cat /tmp/ftps.port) \
     RM_TEST_HTTP_PORT=$(cat /tmp/http.port) ctest --preset tests
+# + SMB contre un vrai Samba (réglages par défaut : SMB2 minimum, comme un NAS)
+sudo tools/test_smb_server.sh 4450 /tmp/rm-smb && RM_TEST_SMB_PORT=4450 ctest --preset tests -R Smb
 # + contre-vérification des NSP générés par hactool (clés factices)
 RM_HACTOOL=/chemin/vers/hactool ctest --preset tests -R ApplicationNsp
 
@@ -116,3 +120,12 @@ La source de la boutique se règle dans `sdmc:/switch/RetroManager/config.json`
 
 Sur desktop, `sdmc/` joue le rôle de la racine `sdmc:/` de la console : l'app
 y lit et y écrit exactement comme elle le ferait sur la carte SD.
+
+## Licences tierces
+
+libsmb2 (client SMB2/3) est sous LGPL-2.1 : elle est compilée depuis ses
+sources publiques (https://github.com/sahlberg/libsmb2, commit figé dans
+`cmake/Dependencies.cmake`) et liée statiquement ; les sources de RetroManager
+étant publiques, l'application peut être reconstruite avec une autre version
+de la bibliothèque. stb (domaine public / MIT), nlohmann/json (MIT), libcurl
+(licence curl), Borealis (Apache-2.0).

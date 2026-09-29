@@ -4,6 +4,9 @@
 #include <cctype>
 
 #include "retromanager/core/Url.hpp"
+#ifdef RM_WITH_SMB
+#include "retromanager/network/SmbClient.hpp"
+#endif
 
 namespace rm {
 
@@ -34,6 +37,7 @@ std::string SourceCatalog::typeForUrl(const std::string& url) {
     std::string scheme = lower(text.substr(0, colon));
     if (scheme == "ftp" || scheme == "ftps") return "ftp";
     if (scheme == "http" || scheme == "https") return "http";
+    if (scheme == "smb") return "smb";
     return "";
 }
 
@@ -55,7 +59,8 @@ Status SourceCatalog::prepare(ShopConfig& source, const std::string& replacing) 
     if (source.type.empty()) {
         if (scheme == "http" || scheme == "https") source.type = "http";
         else if (scheme == "ftp" || scheme == "ftps") source.type = "ftp";
-        else return makeError(ErrorCode::Unsupported, "use an ftp://, ftps://, http:// or https:// address");
+        else if (scheme == "smb") source.type = "smb";
+        else return makeError(ErrorCode::Unsupported, "use an ftp://, ftps://, smb://, http:// or https:// address");
         source.verifyTls = source.type == "http";
     }
     // Same checks the clients will make: refuse now rather than at the first download.
@@ -63,6 +68,12 @@ Status SourceCatalog::prepare(ShopConfig& source, const std::string& replacing) 
         if (auto http = httpConfigFromShop(source, config_.caBundle); !http) return http.error();
     } else if (source.type == "ftp") {
         if (auto ftp = ftpConfigFromShop(source); !ftp) return ftp.error();
+    } else if (source.type == "smb") {
+#ifdef RM_WITH_SMB
+        if (auto smb = smbConfigFromUrl(source.url, source.username, source.password); !smb) return smb.error();
+#else
+        return makeError(ErrorCode::Unsupported, "this build has no SMB support (RM_WITH_SMB=OFF)");
+#endif
     } else {
         return makeError(ErrorCode::Unsupported, "unknown source type " + source.type);
     }

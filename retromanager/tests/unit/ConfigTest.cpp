@@ -151,7 +151,7 @@ TEST(ConfigParser, TypesAreCaseInsensitiveWithAliases) {
 TEST(ConfigParser, ABadSourceIsSkippedNotTheWholeFile) {
     auto parsed = parseConfig(R"({"sources": [
         {"name": "Bon", "url": "ftp://nas/shop/"},
-        {"name": "Mauvais", "type": "smb", "url": "smb://nas/"},
+        {"name": "Mauvais", "type": "webdav", "url": "dav://nas/"},
         3,
         {"name": "Mot de passe", "url": "ftp://nas2/", "password": ["oops"]}
     ]})");
@@ -161,7 +161,7 @@ TEST(ConfigParser, ABadSourceIsSkippedNotTheWholeFile) {
     // One warning per skipped entry, naming it: the Sources screen shows them.
     ASSERT_EQ(parsed.value().warnings.size(), 3u);
     EXPECT_NE(parsed.value().warnings[0].find("Mauvais"), std::string::npos) << parsed.value().warnings[0];
-    EXPECT_NE(parsed.value().warnings[0].find("smb"), std::string::npos);
+    EXPECT_NE(parsed.value().warnings[0].find("webdav"), std::string::npos);
     EXPECT_NE(parsed.value().warnings[1].find("sources[2]"), std::string::npos) << parsed.value().warnings[1];
     EXPECT_NE(parsed.value().warnings[2].find("password"), std::string::npos) << parsed.value().warnings[2];
 }
@@ -315,3 +315,20 @@ TEST(ConfigManager, ReadOnlyCardReportsTheError) {
     EXPECT_EQ(config.error().code, ErrorCode::PermissionDenied);
 }
 
+
+TEST(ConfigParser, SmbSources) {
+    auto parsed = parseConfig(R"({"sources": [
+        {"name": "ZimaOS", "url": "smb://192.168.1.102/HDD-Storage1/roms ds/shop.json", "user": "leo", "pass": "pw"},
+        {"name": "Samba", "type": "Samba", "url": "smb://nas/Public/"},
+        {"name": "Windows", "type": "CIFS", "url": "smb://pc/Jeux/"},
+        "smb://nas2/Share/"
+    ]})");
+    ASSERT_TRUE(parsed.ok()) << parsed.error().describe();
+    ASSERT_EQ(parsed.value().sources.size(), 4u);
+    for (const ShopConfig& s : parsed.value().sources) {
+        EXPECT_EQ(s.type, "smb") << s.name;
+        EXPECT_FALSE(s.verifyTls);
+    }
+    EXPECT_EQ(parsed.value().sources[0].url, "smb://192.168.1.102/HDD-Storage1/roms ds/shop.json");
+    EXPECT_TRUE(parsed.value().warnings.empty());
+}

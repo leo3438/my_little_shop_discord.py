@@ -450,6 +450,17 @@ flowchart LR
   `FormField` (boîtes `ROW`) sont focusables ; Borealis demande la suite à la
   vue focalisée elle-même, et une boîte `COLUMN` focusable parcourait d'abord
   ses propres enfants.
+- **SMB** (`SmbClient`, bibliothèque `retromanager_smb`, indépendante de
+  curl) : SMB2/3 via libsmb2 (LGPL-2.1, compilée depuis ses sources à un
+  commit figé, sans Kerberos ni DCE/RPC ; la Switch est une plateforme
+  qu'elle prend en charge). libcurl ne parle que SMB1, que Samba refuse par
+  défaut : vérifié contre un vrai Samba (`cURL error 7`), d'où un client à
+  part plutôt qu'un « CurlClient » multi-protocoles. Une connexion par appel,
+  lecture par blocs (taille max du serveur, 1 Mio au plus), reprise par
+  `lseek`, envoi vers `.<nom>.tmp` puis renommage. Une source par partage :
+  le routeur compare aussi le partage. Erreurs : statut NT nommé et
+  expliqué. Tests d'intégration contre Samba avec ses réglages par défaut
+  (`tools/test_smb_server.sh`, `RM_TEST_SMB_PORT`).
 - **Erreurs réseau** : `curl::fromCode` → `cURL error <code> (<nom>): <détail
   du serveur>` ; les URL passent par `url::encodeForTransfer` (espaces,
   non-ASCII) avant libcurl. Journal : `/switch/RetroManager/logs/retromanager.log`.
@@ -632,4 +643,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 8 | File de téléchargements (`DownloadQueueManager`, écran « Téléchargements »), reprise FTP `REST` (écritures reprenables dans `IFileSystem`), « Mettre à jour N applications », icône `<nom>.jpg` | ✅ |
 | 9 | `HttpClient` (reprise `Range`), sources multiples (`SourceRouter`, `SourceCatalog`, écran « Sources »), scraper de jaquettes libretro, file persistante (`queue.json`, reprise au lancement) | ✅ |
 | 10 | Forwarders : crypto (AES-128, SHA-256), icône 256x256 (stb), écriture NSP isolée (`nsp/`), `ForwarderBuilder`, X « Créer un raccourci (Forwarder) » sur un jeu installé | ✅ |
-| 11+ | Source SMB, identification des ROMs par CRC (bases libretro) | — |
+| 11 | Sources SMB2/3 (`SmbClient`, libsmb2) : partages Windows / NAS (ZimaOS…), invité ou identifiants, sauvegardes cloud en SMB | ✅ |
+| 12+ | Identification des ROMs par CRC (bases libretro) | — |

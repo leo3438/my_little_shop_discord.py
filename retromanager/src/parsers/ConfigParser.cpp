@@ -158,9 +158,11 @@ Result<ShopConfig> parseSource(const json& entry, const std::string& where, cons
         source.type = lower(source.type);
         if (source.type == "https" || source.type == "web") source.type = "http";
         if (source.type == "ftps" || source.type == "nas") source.type = "ftp";
-        if (!source.type.empty() && source.type != "ftp" && source.type != "http" && source.type != "mock") {
+        if (source.type == "samba" || source.type == "cifs" || source.type == "windows") source.type = "smb";
+        if (!source.type.empty() && source.type != "ftp" && source.type != "http" && source.type != "smb" &&
+            source.type != "mock") {
             return makeError(ErrorCode::ParseError,
-                             label + ": unknown type " + inQuotes(source.type) + " (ftp, http or mock)");
+                             label + ": unknown type " + inQuotes(source.type) + " (ftp, http, smb or mock)");
         }
     }
     auto trim = [](std::string& s) {
@@ -172,7 +174,7 @@ Result<ShopConfig> parseSource(const json& entry, const std::string& where, cons
     if (source.name.empty()) source.name = defaultName;
     if (source.type.empty()) {  // from the URL: http(s):// is a web shop, anything else a NAS
         std::string scheme = lower(source.url.substr(0, source.url.find(':')));
-        source.type = scheme == "http" || scheme == "https" ? "http" : "ftp";
+        source.type = scheme == "http" || scheme == "https" ? "http" : scheme == "smb" ? "smb" : "ftp";
     }
     source.verifyTls = source.type == "http";
     if (entry.is_object()) {

@@ -18,10 +18,16 @@ if (NOT RM_WITH_CURL)  # everything that needs the libcurl clients
     list(FILTER RM_TEST_SOURCES EXCLUDE REGEX
          "/(Ftp[A-Za-z]*|Http[A-Za-z]*|CloudSyncIntegration|SourceFactory|SourceCatalog)Test\\.cpp$")
 endif ()
+if (NOT RM_WITH_SMB)
+    list(FILTER RM_TEST_SOURCES EXCLUDE REGEX "/Smb[A-Za-z]*Test\\.cpp$")
+endif ()
 add_executable(retromanager_tests ${RM_TEST_SOURCES})
 target_link_libraries(retromanager_tests PRIVATE retromanager_mocks GTest::gtest_main GTest::gmock)
 if (RM_WITH_CURL)
     target_link_libraries(retromanager_tests PRIVATE retromanager_curl)
+endif ()
+if (RM_WITH_SMB)
+    target_link_libraries(retromanager_tests PRIVATE retromanager_smb)
 endif ()
 target_compile_options(retromanager_tests PRIVATE ${RM_WARNINGS})
 

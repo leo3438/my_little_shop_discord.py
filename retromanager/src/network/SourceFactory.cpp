@@ -2,8 +2,22 @@
 
 #include "retromanager/core/Url.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
+#ifdef RM_WITH_SMB
+#include "retromanager/network/SmbClient.hpp"
+#endif
+
+#include <cctype>
 
 namespace rm {
+
+namespace {
+
+[[maybe_unused]] std::string lower(std::string value) {
+    for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return value;
+}
+
+}  // namespace
 
 Result<FtpConfig> ftpConfigFromShop(const ShopConfig& shop) {
     if (shop.url.empty()) return makeError(ErrorCode::NotConfigured, "no shop URL in config.json");
@@ -72,6 +86,20 @@ std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop, const 
         return std::make_unique<HttpClient>(std::move(http.value()));
     }
 
+    if (shop.type == "smb") {
+#ifdef RM_WITH_SMB
+        auto smb = smbConfigFromUrl(shop.url, shop.username, shop.password);
+        if (!smb) {
+            return std::make_unique<UnavailableRemoteSource>(makeError(ErrorCode::NotConfigured, smb.error().describe()),
+                                                             shop.url.empty() ? "(not configured)" : shop.url);
+        }
+        return std::make_unique<SmbClient>(std::move(smb.value()));
+#else
+        return std::make_unique<UnavailableRemoteSource>(
+            makeError(ErrorCode::Unsupported, "this build has no SMB support (RM_WITH_SMB=OFF)"), shop.url);
+#endif
+    }
+
     auto ftp = ftpConfigFromShop(shop);
     if (!ftp) {
         // Whatever the reason (empty, invalid, unsupported URL), the fix is
@@ -111,10 +139,34 @@ SavesSource createSavesSource(const AppConfig& config) {
                                                                      config.savesUrl),
                            config.savesUrl};
     };
-    auto parts = url::split(config.savesUrl);
+    auto parts = url::split(url::encodeForTransfer(config.savesUrl));
     if (!parts) return unusable(parts.error());
+    if (parts.value().scheme == "smb") {
+#ifdef RM_WITH_SMB
+        // Credentials: the URL's, else those of an SMB source on the same
+        // server (any share: one NAS account), else guest.
+        std::string user, password;
+        for (const ShopConfig& shop : config.sources) {
+            if (shop.type != "smb" || !parts.value().userInfo.empty()) continue;
+            auto own = smbConfigFromUrl(shop.url, shop.username, shop.password);
+            if (own && lower(own.value().host) == parts.value().host && own.value().port == parts.value().port.value_or(445)) {
+                user = own.value().username;
+                password = own.value().password;
+                break;
+            }
+        }
+        std::string folder = config.savesUrl;
+        if (folder.back() != '/') folder += '/';
+        auto smb = smbConfigFromUrl(folder + "index.json", user, password);
+        if (!smb) return unusable(smb.error());
+        std::string base = SmbClient::buildUrl(smb.value(), smb.value().indexPath.substr(0, smb.value().indexPath.rfind('/') + 1));
+        return SavesSource{std::make_unique<SmbClient>(std::move(smb.value())), base};
+#else
+        return unusable(makeError(ErrorCode::Unsupported, "this build has no SMB support (RM_WITH_SMB=OFF)"));
+#endif
+    }
     if (parts.value().scheme != "ftp" && parts.value().scheme != "ftps") {
-        return unusable(makeError(ErrorCode::Unsupported, "saves_url must be ftp:// or ftps://"));
+        return unusable(makeError(ErrorCode::Unsupported, "saves_url must be ftp://, ftps:// or smb://"));
     }
 
     FtpConfig ftp;

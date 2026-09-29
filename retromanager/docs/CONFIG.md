@@ -44,6 +44,45 @@ dans `config.json.bak`.
 
 ![Test d'une source : la raison exacte de l'échec (build desktop)](source-test-desktop.png)
 
+## Partages SMB (Windows, ZimaOS, Synology, TrueNAS…)
+
+![Source SMB détectée dans le formulaire (build desktop)](source-smb-desktop.png)
+
+Un NAS partage souvent son stockage en SMB sans rien installer :
+
+```json
+{
+  "sources": [
+    { "name": "ZimaOS", "url": "smb://192.168.1.102/HDD-Storage1/roms ds/shop.json",
+      "username": "leo", "password": "..." }
+  ]
+}
+```
+
+- **URL** : `smb://hôte[:port]/partage/dossier/fichier`. Le premier segment est
+  le **partage** (`HDD-Storage1`), la suite le chemin dans le partage. Une URL
+  qui finit par `/` désigne `index.json`. Les espaces peuvent être tapés tels
+  quels. Le type `smb` est déduit de l'URL (le formulaire affiche « Partage
+  SMB ») ; `"type"` peut aussi valoir `smb`, `samba`, `cifs` ou `windows`.
+- **Identifiants** : `username` / `password` (authentification NTLM, celle
+  des NAS domestiques). Vides : accès **invité**, pour un partage public
+  (« guest ok »). Un domaine s'écrit `smb://DOMAINE;user@hôte/...`.
+- **Version du protocole** : SMB2 / SMB3, via libsmb2. libcurl, lui, ne parle
+  que SMB1, désactivé par défaut depuis Samba 4.11 : il échouait avec
+  `cURL error 7` sur un NAS récent, d'où ce client dédié. Rien à changer sur
+  le NAS.
+- Les ROMs relatives de l'index sont téléchargées depuis le même partage
+  (reprise après coupure comprise) ; une URL vers un autre hôte ou un autre
+  partage est refusée (les identifiants ne partent jamais ailleurs).
+- **Sauvegardes cloud** : `"saves_url": "smb://192.168.1.102/HDD-Storage1/Saves/"`
+  utilise les identifiants d'une source SMB du même NAS ; le compte doit
+  pouvoir écrire dans ce dossier.
+- **Erreurs** : le statut NT est nommé et expliqué, par exemple
+  `STATUS_LOGON_FAILURE (0xC000006D): wrong user name or password`,
+  `STATUS_BAD_NETWORK_NAME (0xC00000CC): no share with this name on the
+  server`, `STATUS_ACCESS_DENIED (0xC0000022)` (invité refusé ou droits),
+  `connection refused` (mauvais port, ou SMB désactivé).
+
 ## Diagnostiquer un problème réseau
 
 - Les erreurs réseau donnent le **code cURL** et son nom, suivis de la

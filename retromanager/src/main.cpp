@@ -11,6 +11,9 @@
 #include "retromanager/core/WorkerThread.hpp"
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
+#ifdef RM_WITH_SMB
+#include "retromanager/network/SmbClient.hpp"
+#endif
 #include "retromanager/network/SourceRouter.hpp"
 #include "retromanager/platform/LocalFileSystem.hpp"
 #include "retromanager/platform/Platform.hpp"
@@ -105,8 +108,17 @@ RemoteSources createRemoteSources(rm::AppContext& context) {
     sources.shops = std::make_unique<rm::SourceRouter>();
     for (const rm::ShopConfig& shop : sources.config.sources) {
         std::shared_ptr<rm::IRemoteSource> source;
-        if (shop.type == "mock") source = rm::MockRemoteSource::createDemo();
-        else source = std::make_shared<rm::UnavailableRemoteSource>(noCurl, shop.url);
+        if (shop.type == "mock") {
+            source = rm::MockRemoteSource::createDemo();
+#ifdef RM_WITH_SMB
+        } else if (shop.type == "smb") {  // libsmb2 does not need curl
+            auto smb = rm::smbConfigFromUrl(shop.url, shop.username, shop.password);
+            if (smb) source = std::make_shared<rm::SmbClient>(smb.value());
+            else source = std::make_shared<rm::UnavailableRemoteSource>(smb.error(), shop.url);
+#endif
+        } else {
+            source = std::make_shared<rm::UnavailableRemoteSource>(noCurl, shop.url);
+        }
         sources.shops->add(shop.name, shop.type, source);
     }
     sources.shops->setActive(sources.config.activeSource);
