@@ -1,7 +1,7 @@
 # Format d'index de boutique (v1)
 
 Une boutique RetroManager est un fichier JSON (par convention `index.json`)
-posé sur le NAS, à côté des ROMs. Le format s'inspire des index Tinfoil et
+posé sur le NAS, à côté des ROMs, ou publié sur un site web (HTTP/HTTPS). Le format s'inspire des index Tinfoil et
 en accepte la forme minimale (`files` + `success`), en y ajoutant les
 métadonnées utiles à l'émulation.
 
@@ -88,9 +88,11 @@ Tout autre champ est ignoré (compatibilité ascendante).
 
 ### Hébergement des ROMs
 
-Les identifiants du NAS ne sont envoyés qu'au serveur de l'index (même hôte,
-même port) : une entrée pointant vers un autre serveur est refusée au
-téléchargement. Les ROMs sont installées dans `/roms/<system>/<nom>` ; les
+Les identifiants ne sont envoyés qu'au serveur de l'index (même hôte, même
+port). Pour une boutique FTP, une entrée pointant vers un autre serveur FTP
+est refusée au téléchargement ; une entrée `http(s)://` vers un autre site
+est téléchargée **sans identifiants**. Pour une boutique web, les fichiers
+peuvent être sur n'importe quel site HTTP(S). Les ROMs sont installées dans `/roms/<system>/<nom>` ; les
 caractères interdits sur FAT/exFAT (`<>:"|?*`) deviennent `_`.
 
 ### Codes de triche
@@ -110,8 +112,8 @@ L'image est installée dans
 là que RetroArch la cherche pour l'entrée de playlist que RetroManager crée
 (`label` = nom de la ROM sans extension, les caractères `& * / : < > ? \ |`
 et l'accent grave devenant `_`). **PNG uniquement** (RetroArch ne charge pas d'autre format en
-vignette) ; 8 Mio au maximum. Elle doit être sur le serveur de la boutique
-(mêmes règles que les ROMs).
+vignette) ; 8 Mio au maximum. Sans `boxart` (ou s'il est introuvable), le
+scraper essaie le serveur de vignettes libretro (voir `docs/CONFIG.md`).
 
 ### Playlists
 

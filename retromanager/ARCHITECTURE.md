@@ -407,7 +407,53 @@ progression ne met à jour que des libellés. `DownloadNotifier` affiche
 « Téléchargements (N) » ; boutique et App Store : Y ; App Store : bouton
 « Mettre à jour N applications ».
 
-### 4.8 Asynchronisme
+### 4.8 Flux implémenté (Phase 9) : web, sources multiples, scraper, file persistante
+
+```mermaid
+flowchart LR
+    Shop[ShopService / AppManager / Queue / Thumbnails] --> R[SourceRouter]
+    R -- index : source active --> A[(source active)]
+    R -- URL ftp://nas... --> F[FtpClient du NAS]
+    R -- URL https://boutique... --> H[HttpClient de la boutique]
+    R -- autre URL http(s) --> P[HttpClient public anonyme]
+    R -- autre URL ftp --> X[refusé]
+```
+
+- **`HttpClient`** (`network/`, libcurl) : `IRemoteSource` HTTP(S). Index en
+  mémoire (plafonné), fichiers en flux, reprise `Range: bytes=N-` (206
+  attendu ; 200 ou 416 = `Unsupported`, détecté au premier octet, avant tout
+  écriture), statut vérifié avant le corps (404/401/403…), redirections
+  suivies (http/https seulement), identifiants Basic uniquement vers
+  l'hôte de la source et jamais transmis à une redirection. Pas de listing ni
+  d'envoi (`Unsupported`). `curl::ensureInitialized()` est partagé avec
+  `FtpClient` (un seul `curl_global_init` par processus).
+- **`SourceRouter`** : toutes les sources derrière un seul `IRemoteSource`.
+  Côté boutique (index, description), la source *active*, changeable à
+  chaud ; côté URL, la source *propriétaire* (même serveur que son index) :
+  un téléchargement en file garde son serveur et ses identifiants même si
+  l'utilisateur change de boutique. Les autres URL web passent par le client
+  public anonyme (jaquettes libretro) ; les autres serveurs FTP sont refusés.
+  Une source supprimée reste vivante tant qu'un transfert l'utilise
+  (`shared_ptr`).
+- **`SourceCatalog`** : ajout / suppression / activation d'une source, validé
+  comme le ferait le client, appliqué au routeur **et** enregistré dans
+  `config.json` (jamais si le fichier était illisible). Écran `SourcesActivity`
+  (saisie au clavier de la console, confirmation par boîte de dialogue).
+- **Scraper** : `ThumbnailManager` essaie la jaquette de l'index, puis
+  `<base>/<système libretro>/Named_Boxarts/<libellé>.png` (encodé), en
+  silence en cas d'absence.
+- **File persistante** : chaque `DownloadJob` porte une charge utile JSON
+  (`EntryJson` : le `GameEntry` ou l'`AppEntry` complet). À chaque changement
+  de la file, `DownloadQueueManager` appelle la fonction de persistance avec
+  les éléments restants (en cours compris) ; `QueueStore` les écrit
+  atomiquement dans `queue.json`. Pas d'écriture pendant la fermeture de
+  l'app : le fichier garde ce qui restait. Au lancement, `restoreQueue()`
+  remet tout en file (ROM directement, homebrew via `AppManager::job()`), et
+  la reprise `.tmp` fait le reste. Un numéro de séquence empêche un état
+  ancien d'écraser un plus récent quand l'UI et le worker enregistrent en
+  même temps.
+
+### 4.9 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
@@ -436,7 +482,7 @@ progression ne met à jour que des libellés. `DownloadNotifier` affiche
   leur destructeur annule tout et attend la fin du transfert en cours. Dans
   `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.9 Gestion des erreurs
+### 4.10 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -455,11 +501,13 @@ traverse une frontière de couche (le parser attrape celles de nlohmann/json).
 4. **Intégration** (`tests/integration`) : `FtpClient` → `DownloadQueueManager` →
    `RomStore` → disque, contre un vrai serveur local
    (`tools/test_ftp_server.py`, pyftpdlib) servant `tests/fixtures/ftp_root`
-   plus une ROM générée de 64 Mio avec son CRC, et un second serveur **FTPS**
-   au certificat auto-signé. Couvert : flux, mémoire bornée, annulation,
+   plus une ROM générée de 64 Mio avec son CRC, un second serveur **FTPS**
+   au certificat auto-signé, et la même arborescence en **HTTP** (Range,
+   serveur sans Range, Basic auth, codes d'erreur, redirection, faux serveur
+   de vignettes libretro). Couvert : flux, mémoire bornée, annulation,
    nettoyage du `.tmp`, fichier absent, identifiants jamais envoyés à un autre
-   hôte, `verifyTls` on/off. Ignorés (`SKIPPED`) sans `RM_TEST_FTP_PORT` /
-   `RM_TEST_FTPS_PORT`.
+   hôte, `verifyTls` on/off, reprise REST et Range. Ignorés (`SKIPPED`) sans
+   `RM_TEST_FTP_PORT` / `RM_TEST_FTPS_PORT` / `RM_TEST_HTTP_PORT`.
 5. **CI** (`.github/workflows/retromanager.yml`) : tests sous ASan et UBSan
    avec les deux serveurs, build desktop, libcurl compilée depuis les
    sources, build Switch `.nro` dans le conteneur `devkitpro/devkita64`.
@@ -498,4 +546,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 6 | Playlists RetroArch (`PlaylistDocument`, `PlaylistManager`), jaquettes (`ThumbnailManager`), BIOS (catalogue, MD5, section `bios` de l'index, `BiosManager`, écran « Vérification des BIOS »), sys-clk sur l'applet Album | ✅ |
 | 7 | App Store personnel : sections `apps` / `emulators`, `AppManager` (`/switch/<nom>/<nom>.nro`, en-tête NRO, `icon.jpg`, versions installées), pipeline de téléchargement générique (`FileInstall`, `DownloadJob`), écran « Émulateurs & Homebrews » | ✅ |
 | 8 | File de téléchargements (`DownloadQueueManager`, écran « Téléchargements »), reprise FTP `REST` (écritures reprenables dans `IFileSystem`), « Mettre à jour N applications », icône `<nom>.jpg` | ✅ |
-| 9+ | Sources HTTP/SMB, scraping automatique (bases libretro), forwarders, file persistante entre deux lancements | — |
+| 9 | `HttpClient` (reprise `Range`), sources multiples (`SourceRouter`, `SourceCatalog`, écran « Sources »), scraper de jaquettes libretro, file persistante (`queue.json`, reprise au lancement) | ✅ |
+| 10+ | Source SMB, forwarders, identification des ROMs par CRC (bases libretro) | — |

@@ -9,6 +9,7 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Vérification des BIOS (build desktop)](docs/bios-desktop.png)
 ![Émulateurs & Homebrews (build desktop)](docs/apps-desktop.png)
 ![File de téléchargements (build desktop)](docs/downloads-desktop.png)
+![Sources (build desktop)](docs/sources-desktop.png)
 
 Après chaque téléchargement, RetroManager intègre le jeu à RetroArch : il
 l'ajoute à la playlist de son système (il apparaît directement dans le menu
@@ -21,7 +22,12 @@ L'écran « Émulateurs & Homebrews » est un App Store personnel : il installe
 les `.nro` de votre NAS (RetroArch, melonDS, pNES…) dans
 `/switch/<nom>/<nom>.nro`, avec leur icône, et signale les mises à jour.
 
-Tous les téléchargements passent par une file : un clic ajoute le jeu ou
+Les boutiques peuvent être un NAS (FTP/FTPS) ou un site web (HTTP/HTTPS),
+plusieurs à la fois (écran « Sources ») ; sans jaquette dans l'index,
+RetroManager va la chercher sur le serveur de vignettes libretro.
+
+Tous les téléchargements passent par une file (conservée entre deux
+lancements, elle reprend toute seule) : un clic ajoute le jeu ou
 l'application, la file les traite un par un en arrière-plan (écran
 « Téléchargements » : progression, retrait, annulation), et un
 téléchargement coupé reprend là où il s'était arrêté (FTP `REST`).
@@ -60,10 +66,11 @@ Toutes les commandes se lancent depuis `retromanager/`.
 cmake --preset tests && cmake --build --preset tests && ctest --preset tests
 
 # App desktop + tests, sur une fausse carte SD dont config.json pointe vers
-# ftp://127.0.0.1:2121 (serveur de test, limité à 8 Mo/s pour voir la progression ;
-# boutique dans /shop, sauvegardes cloud dans /saves, accessible en écriture)
+# ftp://127.0.0.1:2121 et http://127.0.0.1:8121 (serveurs de test, limités à 8 Mo/s
+# pour voir la progression ; boutique dans /shop, sauvegardes cloud dans /saves,
+# faux serveur de vignettes libretro dans /thumbnails)
 python3 tools/make_mock_sd.py          # crée ./sdmc à partir de tests/fixtures/sd_card
-python3 tools/test_ftp_server.py --port 2121 --throttle-kbps 8192 &
+python3 tools/test_ftp_server.py --port 2121 --http-port 8121 --throttle-kbps 8192 &
 cmake --preset desktop && cmake --build --preset desktop
 ./build/desktop/RetroManager           # -d : logs debug, -v : vue de debug
 
@@ -80,10 +87,12 @@ RETROMANAGER_MOCK_LATENCY_MS=3000 ./build/desktop/RetroManager
 RETROMANAGER_MOCK_ERROR=network ./build/desktop/RetroManager   # network|auth|notfound|format
 RETROMANAGER_MOCK_SPEED_KBPS=2048 ./build/desktop/RetroManager  # vitesse des téléchargements
 
-# Tests d'intégration FTP + FTPS contre de vrais serveurs locaux
+# Tests d'intégration FTP + FTPS + HTTP contre de vrais serveurs locaux
 # (pip install pyftpdlib pyopenssl ; openssl en ligne de commande)
-python3 tools/test_ftp_server.py --port-file /tmp/ftp.port --ftps-port-file /tmp/ftps.port &
-RM_TEST_FTP_PORT=$(cat /tmp/ftp.port) RM_TEST_FTPS_PORT=$(cat /tmp/ftps.port) ctest --preset tests
+python3 tools/test_ftp_server.py --port-file /tmp/ftp.port --ftps-port-file /tmp/ftps.port \
+    --http-port-file /tmp/http.port &
+RM_TEST_FTP_PORT=$(cat /tmp/ftp.port) RM_TEST_FTPS_PORT=$(cat /tmp/ftps.port) \
+    RM_TEST_HTTP_PORT=$(cat /tmp/http.port) ctest --preset tests
 
 # Switch
 cmake --preset switch && cmake --build --preset switch

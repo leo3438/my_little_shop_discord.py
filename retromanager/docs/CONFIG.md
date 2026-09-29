@@ -8,30 +8,87 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
 ```json
 {
   "version": 1,
-  "shop": {
-    "type": "ftp",
-    "url": "ftp://192.168.1.20:21/shop/index.json",
-    "username": "leo",
-    "password": "mon-mot-de-passe",
-    "verifyTls": false
-  },
+  "sources": [
+    {
+      "name": "NAS",
+      "type": "ftp",
+      "url": "ftp://192.168.1.20:21/shop/index.json",
+      "username": "leo",
+      "password": "mon-mot-de-passe",
+      "verifyTls": false
+    },
+    {
+      "name": "Boutique web",
+      "type": "http",
+      "url": "https://retro.example.org/shop.json",
+      "verifyTls": true
+    }
+  ],
+  "active_source": "NAS",
   "saves_url": "ftp://192.168.1.20:21/Saves/",
-  "sysclk": {
-    "enabled": true,
-    "title_id": "010000000000100D"
-  }
+  "sysclk": { "enabled": true, "title_id": "010000000000100D" },
+  "scraper": { "enabled": true, "base_url": "https://thumbnails.libretro.com/" },
+  "ca_bundle": ""
 }
 ```
 
+Les sources se gèrent aussi depuis l'écran **Sources** de l'accueil (ajout au
+clavier de la console, choix de la source active, suppression) : chaque
+changement est appliqué tout de suite et réécrit ce fichier. L'ancien format
+à une seule boutique (`"shop": {...}`) est toujours lu : il devient la source
+« NAS » et le fichier est réécrit au nouveau format à la première
+modification.
+
 | Champ | Défaut | Rôle |
 |---|---|---|
-| `shop.type` | `"ftp"` | `"ftp"` : un vrai serveur. `"mock"` : la boutique de démonstration intégrée (aucun réseau). |
-| `shop.url` | `""` | Emplacement de l'index. `ftp://` ou `ftps://` (FTPS **explicite**, AUTH TLS, comme la plupart des NAS). Une URL qui finit par `/` désigne `<url>index.json`. Port 21 par défaut. Le chemin est relatif au dossier de connexion FTP (la racine du partage sur un NAS). |
-| `shop.username` / `shop.password` | `""` | Identifiants. Vides : `anonymous`, ou ceux inclus dans l'URL (`ftp://user:pass@hote/`). |
-| `shop.verifyTls` | `false` | Vérification du certificat en FTPS. Voir ci-dessous. Vaut aussi pour `saves_url`. |
-| `saves_url` | `""` | Dossier du NAS pour les sauvegardes cloud (`ftp://` ou `ftps://`). Vide : bouton « Synchroniser les sauvegardes » inactif (message explicatif). Identifiants : ceux de l'URL (`ftp://user:pass@nas/Saves/`), sinon ceux de la boutique **si et seulement si** même hôte et même port, sinon `anonymous`. Le compte doit pouvoir **écrire** dans ce dossier (envoi, renommage, création de sous-dossiers). |
+| `sources[].name` | `"Source N"` | Nom affiché, unique (casse ignorée). |
+| `sources[].type` | déduit de l'URL | `"ftp"` (NAS, FTP/FTPS), `"http"` (boutique web, HTTP/HTTPS), `"mock"` (démo intégrée, aucun réseau). |
+| `sources[].url` | `""` | Emplacement de l'index : `ftp://`, `ftps://` (FTPS **explicite**, AUTH TLS), `http://` ou `https://`. Une URL qui finit par `/` désigne `<url>index.json`. En FTP, le chemin est relatif au dossier de connexion (la racine du partage sur un NAS). |
+| `sources[].username` / `password` | `""` | Identifiants (FTP, ou authentification Basic en HTTP). Vides : anonyme, ou ceux inclus dans l'URL (`ftp://user:pass@hote/`). |
+| `sources[].verifyTls` | FTP : `false` ; HTTP : `true` | Vérification du certificat. Voir ci-dessous. |
+| `active_source` | la première | Source affichée par la boutique et l'App Store. Un nom inconnu (source supprimée) revient à la première. |
+| `saves_url` | `""` | Dossier du NAS pour les sauvegardes cloud (`ftp://` ou `ftps://`). Vide : bouton « Synchroniser les sauvegardes » inactif (message explicatif). Identifiants : ceux de l'URL (`ftp://user:pass@nas/Saves/`), sinon ceux d'une source FTP **sur le même hôte et le même port**, sinon `anonymous`. Le compte doit pouvoir **écrire** dans ce dossier. |
 | `sysclk.enabled` | `true` | Après l'installation d'un jeu N64 / PlayStation, règle sys-clk sur 1785 MHz (CPU, portable et dock) pour RetroArch. La 3DS n'est pas concernée : elle tourne dans Citra (autonome), pas dans RetroArch. |
 | `sysclk.title_id` | `"010000000000100D"` | Section de `/config/sys-clk/config.ini` à modifier : 16 chiffres hexadécimaux, sinon la configuration est refusée. Voir ci-dessous. |
+| `scraper.enabled` | `true` | Jaquette de secours sur le serveur de vignettes libretro quand l'index n'en donne pas (ou qu'elle est introuvable). Voir ci-dessous. |
+| `scraper.base_url` | `"https://thumbnails.libretro.com/"` | Serveur de vignettes (un miroir, ou un serveur local de test). |
+| `ca_bundle` | `""` | Fichier PEM d'autorités de certification pour HTTPS (chemin de l'hôte : `sdmc:/switch/RetroManager/cacert.pem` sur Switch). Vide : celui de libcurl. |
+
+## Boutiques web (HTTP/HTTPS)
+
+- L'index et les fichiers peuvent être n'importe où sur le web : une URL
+  relative se résout par rapport à l'index, une URL absolue peut viser un
+  autre site. Les **identifiants** ne partent que vers le schéma, l'hôte et
+  le port de la source elle-même, jamais vers un autre site ni à travers une
+  redirection.
+- Téléchargements **reprenables** : `Range: bytes=<déjà reçu>-`. Un serveur
+  qui ignore l'en-tête (réponse 200) ou le refuse (416) est détecté avant
+  qu'un seul octet ne soit écrit, et le fichier repart de zéro.
+- Les pages d'erreur ne sont jamais enregistrées comme ROM : le code HTTP est
+  vérifié d'abord (404 → introuvable, 401 → identifiants, 403 → refusé).
+- **Certificats sur Switch** : HTTPS est vérifié par défaut. Si la console
+  refuse un site au certificat pourtant valide, déposez un `cacert.pem`
+  (par exemple celui de https://curl.se/docs/caextract.html) et indiquez-le
+  dans `ca_bundle`, ou, en dernier recours, `verifyTls: false` pour cette
+  source (chiffré mais non authentifié).
+
+## Scraper de jaquettes
+
+Quand un jeu n'a pas de `boxart` dans l'index (ou qu'elle est introuvable),
+RetroManager essaie
+`<base_url><système libretro>/Named_Boxarts/<nom de la ROM sans extension>.png`,
+par exemple
+`https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/Super%20Mario%20World%20(USA).png`.
+Cela fonctionne quand les ROMs portent leur nom **No-Intro** (celui des bases
+libretro). Une absence (404) ou une console hors ligne sont ignorées sans
+message. Désactivez-le avec `"scraper": {"enabled": false}`.
+
+## File de téléchargements
+
+La file est enregistrée dans `/switch/RetroManager/queue.json` à chaque
+changement. Au lancement suivant, les éléments qui restaient (y compris celui
+qui était en cours) sont remis en file automatiquement et reprennent grâce à
+leur fichier `.tmp`. Supprimer `queue.json` vide la file.
 
 ## Comportement
 
@@ -40,7 +97,7 @@ de le compléter. Code : `src/parsers/ConfigParser.cpp`,
   invalide : la configuration est **refusée** et le fichier n'est **jamais
   réécrit**. La boutique affiche l'erreur (avec la ligne et la colonne), à
   corriger sur la carte SD.
-- URL vide, invalide ou non supportée (`http://`, `smb://` pour l'instant) :
+- URL vide, invalide ou non supportée (`smb://` pour l'instant) :
   l'application démarre quand même ; l'écran Boutique explique quoi corriger.
 
 ## Sauvegardes cloud
