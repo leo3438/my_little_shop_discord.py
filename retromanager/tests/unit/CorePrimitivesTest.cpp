@@ -38,6 +38,7 @@ class RecordingStream : public IWriteStream {
         std::vector<std::size_t> writes;
         std::string data;
         bool closed = false;
+        bool suspended = false;
         bool destroyed = false;
     };
     explicit RecordingStream(Log& log, int failAtWrite = -1) : log_(log), failAt_(failAtWrite) {}
@@ -51,6 +52,10 @@ class RecordingStream : public IWriteStream {
     }
     Status close() override {
         log_.closed = true;
+        return success();
+    }
+    Status suspend() override {
+        log_.suspended = true;
         return success();
     }
 
@@ -347,4 +352,15 @@ TEST(BufferedWriteStream, EmptyFileStillCommits) {
     ASSERT_TRUE(stream.close().ok());
     EXPECT_TRUE(log.closed);
     EXPECT_TRUE(log.writes.empty());
+}
+
+TEST(BufferedWriteStream, SuspendFlushesThenKeepsTheInnerStaging) {
+    RecordingStream::Log log;
+    BufferedWriteStream stream(std::make_unique<RecordingStream>(log), 64);
+    ASSERT_TRUE(stream.write("abc", 3).ok());
+    ASSERT_TRUE(stream.suspend().ok());
+    EXPECT_EQ(log.data, "abc");  // nothing buffered is lost
+    EXPECT_TRUE(log.suspended);
+    EXPECT_FALSE(log.closed);
+    EXPECT_FALSE(stream.write("d", 1).ok());
 }

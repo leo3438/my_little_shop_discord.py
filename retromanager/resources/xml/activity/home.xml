@@ -11,7 +11,7 @@
 
         <brls:Label
             text="@i18n/retromanager/home/welcome"
-            fontSize="36"
+            fontSize="32"
             horizontalAlign="center"
             marginBottom="12" />
 
@@ -20,7 +20,7 @@
             horizontalAlign="center"
             marginBottom="28" />
 
-        <!-- 2 x 2 grid: shop and app store, then saves and BIOS. -->
+        <!-- 2 x 2 grid: shop and app store, then saves and BIOS; the download queue below. -->
         <brls:Box axis="row" marginBottom="16">
             <brls:Button
                 id="home/open_shop"
@@ -34,7 +34,7 @@
                 width="380"
                 text="@i18n/retromanager/apps/open" />
         </brls:Box>
-        <brls:Box axis="row" marginBottom="32">
+        <brls:Box axis="row" marginBottom="16">
             <brls:Button
                 id="home/sync_saves"
                 style="bordered"
@@ -47,6 +47,12 @@
                 width="380"
                 text="@i18n/retromanager/bios/open" />
         </brls:Box>
+        <brls:Button
+            id="home/downloads"
+            style="bordered"
+            width="776"
+            text="@i18n/retromanager/downloads/title"
+            marginBottom="24" />
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />

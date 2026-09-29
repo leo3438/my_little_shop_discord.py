@@ -213,7 +213,7 @@ TEST(CheatManager, SkipsWhenRetroArchIsNotInstalled) {
 
 // --- the whole scenario on the demo shop -------------------------------------
 
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
 
 TEST(PostInstallScenario, DsDownloadConfiguresRetroArchAndInstallsCheats) {
@@ -234,7 +234,7 @@ TEST(PostInstallScenario, DsDownloadConfiguresRetroArchAndInstallsCheats) {
     NullSystem system;
     EmulatorConfigurator configurator(*sd, layout);
     CheatManager cheats(*sd, layout, demo);
-    DownloadService downloads(demo, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    DownloadQueueManager downloads(demo, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     downloads.addPostInstallStep(configurator);
     downloads.addPostInstallStep(cheats);
     std::optional<DownloadFinished> finished;

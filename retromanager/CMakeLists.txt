@@ -66,7 +66,7 @@ add_library(retromanager_core STATIC
     src/services/CheatManager.cpp
     src/services/CloudSyncService.cpp
     src/services/ConfigManager.cpp
-    src/services/DownloadService.cpp
+    src/services/DownloadQueueManager.cpp
     src/services/EmulatorConfigurator.cpp
     src/services/PlaylistManager.cpp
     src/services/RetroArchPaths.cpp
@@ -115,7 +115,9 @@ if (RM_BUILD_APP)
         src/main.cpp
         src/ui/AppsListActivity.cpp
         src/ui/BiosActivity.cpp
-        src/ui/DownloadActivity.cpp
+        src/ui/DownloadNotifier.cpp
+        src/ui/DownloadsActivity.cpp
+        src/ui/DownloadSummary.cpp
         src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp
         src/ui/SyncActivity.cpp

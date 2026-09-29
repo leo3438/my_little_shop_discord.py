@@ -43,6 +43,7 @@ struct StreamState {
     const ProgressCallback* progress;
     const CancellationToken* cancel;
     Status sinkStatus;
+    std::uint64_t offset = 0;  // resumed downloads: curl counts from here
 };
 
 std::size_t onStreamData(char* chunk, std::size_t size, std::size_t count, void* userData) {
@@ -57,7 +58,8 @@ int onStreamProgress(void* userData, curl_off_t dlTotal, curl_off_t dlNow, curl_
     auto* state = static_cast<StreamState*>(userData);
     if (state->cancel->isCancelled()) return 1;  // -> CURLE_ABORTED_BY_CALLBACK
     if (*state->progress && dlNow > 0) {
-        (*state->progress)(TransferProgress{static_cast<std::uint64_t>(dlNow), static_cast<std::uint64_t>(dlTotal)});
+        std::uint64_t total = dlTotal > 0 ? state->offset + static_cast<std::uint64_t>(dlTotal) : 0;
+        (*state->progress)(TransferProgress{state->offset + static_cast<std::uint64_t>(dlNow), total});
     }
     return 0;
 }
@@ -230,6 +232,11 @@ Result<std::string> FtpClient::pathOnServer(const std::string& target) const {
 
 Status FtpClient::downloadFile(const std::string& target, const ChunkSink& sink, const ProgressCallback& progress,
                                const CancellationToken& cancel) {
+    return downloadFileFrom(target, 0, sink, progress, cancel);
+}
+
+Status FtpClient::downloadFileFrom(const std::string& target, std::uint64_t offset, const ChunkSink& sink,
+                                   const ProgressCallback& progress, const CancellationToken& cancel) {
     auto path = pathOnServer(target);
     if (!path) return path.error();
     auto curlUrl = buildUrl(config_, path.value());
@@ -240,7 +247,7 @@ Status FtpClient::downloadFile(const std::string& target, const ChunkSink& sink,
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
 
-    StreamState state{&sink, &progress, &cancel, success()};
+    StreamState state{&sink, &progress, &cancel, success(), offset};
     char details[CURL_ERROR_SIZE] = {0};
     CURL* handle = curl.get();
     configure(handle, config_, curlUrl.value(), details);
@@ -254,9 +261,14 @@ Status FtpClient::downloadFile(const std::string& target, const ChunkSink& sink,
     curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, &onStreamProgress);
     curl_easy_setopt(handle, CURLOPT_XFERINFODATA, &state);
+    if (offset > 0) curl_easy_setopt(handle, CURLOPT_RESUME_FROM_LARGE, static_cast<curl_off_t>(offset));  // REST
 
     CURLcode code = curl_easy_perform(handle);
     std::string where = "ftp " + path.value();
+    if (offset > 0 && (code == CURLE_FTP_COULDNT_USE_REST || code == CURLE_BAD_DOWNLOAD_RESUME ||
+                       code == CURLE_RANGE_ERROR)) {
+        return makeError(ErrorCode::Unsupported, where + ": the server refused to resume at " + std::to_string(offset));
+    }
     if (!state.sinkStatus) return state.sinkStatus;  // the SD card refused the data
     if (cancel.isCancelled()) return makeError(ErrorCode::Cancelled, where + ": cancelled");
     if (code != CURLE_OK) return fromCurl(code, details, where);

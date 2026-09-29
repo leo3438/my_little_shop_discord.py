@@ -44,6 +44,8 @@ class MockRemoteSource : public IRemoteSource {
     Result<std::string> fetchIndex() override;
     Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                         const CancellationToken& cancel) override;
+    Status downloadFileFrom(const std::string& url, std::uint64_t offset, const ChunkSink& sink,
+                            const ProgressCallback& progress, const CancellationToken& cancel) override;
     Result<std::vector<RemoteEntry>> listDirectory(const std::string& url) override;
     Status uploadFile(const std::string& url, const ChunkReader& reader, std::uint64_t size,
                       const ProgressCallback& progress, const CancellationToken& cancel) override;
@@ -70,6 +72,11 @@ class MockRemoteSource : public IRemoteSource {
         dropAfter_ = afterBytes;
         dropError_ = std::move(error);
     }
+    void clearDownloadFailure() { dropAfter_.reset(); }
+    // Like a server without REST support.
+    void setResumeSupported(bool supported) { resumeSupported_ = supported; }
+    // Offset asked by the last download (0 = from the start).
+    std::uint64_t lastOffset() const { return lastOffset_.load(); }
     // Download speed cap in bytes per second (0 = unlimited).
     void setThroughput(std::uint64_t bytesPerSecond) { throughput_ = bytesPerSecond; }
     void setChunkSize(std::size_t bytes) { chunkSize_ = bytes; }
@@ -99,6 +106,8 @@ class MockRemoteSource : public IRemoteSource {
     std::optional<std::uint64_t> dropAfter_;
     Error dropError_{ErrorCode::NetworkError, ""};
     std::uint64_t throughput_ = 0;
+    bool resumeSupported_ = true;
+    std::atomic<std::uint64_t> lastOffset_{0};
     std::size_t chunkSize_ = 16 * 1024;  // like curl's default write chunk
     std::atomic<int> fetchCount_{0};
     std::atomic<int> downloadCount_{0};

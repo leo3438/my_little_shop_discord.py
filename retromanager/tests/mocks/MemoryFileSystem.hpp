@@ -22,7 +22,7 @@ class MemoryFileSystem : public IFileSystem {
     Result<std::vector<DirEntry>> listDirectory(std::string_view path) override;
     Status createDirectories(std::string_view path) override;
     Result<std::unique_ptr<IReadStream>> openRead(std::string_view path) override;
-    Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path) override;
+    Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path, WriteOptions options = {}) override;
     Status remove(std::string_view path) override;
     Status removeAll(std::string_view path) override;
     Status rename(std::string_view from, std::string_view to) override;
@@ -56,6 +56,8 @@ class MemoryFileSystem : public IFileSystem {
     friend class MemoryWriteStream;
 
     Status commit(const std::string& path, std::string data);
+    Status keepStaging(const std::string& path, std::string data);
+    void dropStaging(const std::string& path);
     Status checkWritable() const;
     Status checkParentDirectory(const std::string& path) const;
     using NodeMap = std::map<std::string, Node>;

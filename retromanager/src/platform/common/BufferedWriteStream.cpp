@@ -38,4 +38,11 @@ Status BufferedWriteStream::close() {
     return inner_->close();
 }
 
+Status BufferedWriteStream::suspend() {
+    if (closed_) return makeError(ErrorCode::IoError, "stream already closed");
+    closed_ = true;
+    if (Status flushed = flush(); !flushed) return flushed;
+    return inner_->suspend();
+}
+
 }  // namespace rm

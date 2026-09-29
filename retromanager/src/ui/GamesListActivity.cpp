@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "retromanager/core/Format.hpp"
-#include "retromanager/ui/DownloadActivity.hpp"
+#include "retromanager/ui/DownloadsActivity.hpp"
 
 namespace rm::ui {
 
@@ -40,7 +40,7 @@ std::string describeForUser(const Error& error) {
 class GamesDataSource : public brls::RecyclerDataSource {
   public:
     GamesDataSource(std::vector<SystemSection> sections, std::shared_ptr<const std::set<std::string>> installed,
-                    DownloadService& downloads, EventBus& bus)
+                    DownloadQueueManager& downloads, EventBus& bus)
         : sections_(std::move(sections)), installed_(std::move(installed)), downloads_(downloads), bus_(bus) {}
 
     int numberOfSections(brls::RecyclerFrame*) override { return static_cast<int>(sections_.size()); }
@@ -63,14 +63,15 @@ class GamesDataSource : public brls::RecyclerDataSource {
         cell->gameId = game.id;
         cell->title->setText(game.title);
         cell->detail->setText(detailLine(game));
-        cell->setInstalled(installed_->count(game.id) > 0);
+        cell->setState(installed_->count(game.id) > 0, downloads_.isQueued(game.id));
         return cell;
     }
 
     void didSelectRowAt(brls::RecyclerFrame*, brls::IndexPath index) override {
         const GameEntry& game = at(index);
-        brls::Logger::info("Game selected: {} [{}] {}", game.title, game.id, game.romUrl);
-        brls::Application::pushActivity(new DownloadActivity(downloads_, bus_, DownloadRequest::forGame(downloads_, game)));
+        brls::Logger::info("Game queued: {} [{}] {}", game.title, game.id, game.romUrl);
+        downloads_.start(game);
+        brls::Application::notify(brls::getStr("retromanager/downloads/queued", game.title));
     }
 
   private:
@@ -80,7 +81,7 @@ class GamesDataSource : public brls::RecyclerDataSource {
 
     std::vector<SystemSection> sections_;
     std::shared_ptr<const std::set<std::string>> installed_;
-    DownloadService& downloads_;
+    DownloadQueueManager& downloads_;
     EventBus& bus_;
 };
 
@@ -90,11 +91,13 @@ GameCell::GameCell() { this->inflateFromXMLRes("xml/cells/game_cell.xml"); }
 
 GameCell* GameCell::create() { return new GameCell(); }
 
-void GameCell::setInstalled(bool installed) {
-    installedTag->setVisibility(installed ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+void GameCell::setState(bool installed, bool queued) {
+    if (queued) installedTag->setText(brls::getStr("retromanager/downloads/tag_queued"));
+    else if (installed) installedTag->setText(brls::getStr("retromanager/shop/installed"));
+    installedTag->setVisibility(queued || installed ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 }
 
-GamesListActivity::GamesListActivity(ShopService& shop, DownloadService& downloads, EventBus& bus)
+GamesListActivity::GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus)
     : shop_(shop), downloads_(downloads), bus_(bus) {}
 
 GamesListActivity::~GamesListActivity() { *alive_ = false; }
@@ -107,6 +110,11 @@ void GamesListActivity::onContentAvailable() {
         return cell;
     });
     downloadFinished_ = bus_.subscribe<DownloadFinished>([this](const DownloadFinished& e) { onDownloadFinished(e); });
+    queueChanged_ = bus_.subscribe<DownloadQueueChanged>([this](const DownloadQueueChanged&) { refreshTags(); });
+    getContentView()->registerAction(brls::getStr("retromanager/downloads/title"), brls::BUTTON_Y, [this](brls::View*) {
+        brls::Application::pushActivity(new DownloadsActivity(downloads_, bus_));
+        return true;
+    });
     load();
 }
 
@@ -131,8 +139,12 @@ void GamesListActivity::load() {
 void GamesListActivity::onDownloadFinished(const DownloadFinished& event) {
     if (!event.result.ok() || event.itemId.empty()) return;
     installed_->insert(event.itemId);
+    refreshTags();
+}
+
+void GamesListActivity::refreshTags() {
     for (GameCell* cell : cells_) {
-        if (cell->gameId == event.itemId) cell->setInstalled(true);
+        if (!cell->gameId.empty()) cell->setState(installed_->count(cell->gameId) > 0, downloads_.isQueued(cell->gameId));
     }
 }
 

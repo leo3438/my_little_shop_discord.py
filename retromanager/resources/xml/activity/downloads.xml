@@ -1,0 +1,84 @@
+<brls:AppletFrame>
+    <brls:Box
+        id="downloads/root"
+        title="@i18n/retromanager/downloads/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        grow="1.0">
+
+        <brls:ScrollingFrame
+            id="downloads/scroll"
+            width="auto"
+            height="auto"
+            grow="1.0">
+            <brls:Box
+                id="downloads/content"
+                width="auto"
+                height="auto"
+                axis="column"
+                paddingRight="@style/brls/sidebar/padding_right"
+                paddingLeft="@style/brls/sidebar/padding_left"
+                paddingBottom="@style/brls/sidebar/padding_bottom">
+
+                <brls:Header id="downloads/current_header" />
+
+                <!-- The running download. Focusable: the screen always has
+                     something to focus, even with empty lists. -->
+                <brls:Box
+                    id="downloads/current"
+                    width="auto"
+                    height="auto"
+                    axis="column"
+                    alignItems="center"
+                    focusable="true"
+                    paddingTop="16"
+                    paddingBottom="16">
+
+                    <brls:Label id="downloads/current_title" fontSize="24" horizontalAlign="center" marginBottom="4" />
+                    <brls:Label
+                        id="downloads/current_destination"
+                        fontSize="16"
+                        textColor="@theme/brls/text_disabled"
+                        horizontalAlign="center"
+                        marginBottom="16" />
+
+                    <brls:Box
+                        id="downloads/track"
+                        width="800"
+                        height="14"
+                        cornerRadius="7"
+                        backgroundColor="@theme/brls/backdrop"
+                        marginBottom="12">
+                        <brls:Rectangle
+                            id="downloads/fill"
+                            width="0"
+                            height="14"
+                            cornerRadius="7"
+                            color="@theme/brls/accent" />
+                    </brls:Box>
+
+                    <brls:Label id="downloads/current_stats" fontSize="18" horizontalAlign="center" />
+                </brls:Box>
+
+                <brls:Header id="downloads/pending_header" marginTop="12" />
+                <brls:Box id="downloads/pending" width="auto" height="auto" axis="column" />
+                <brls:Label
+                    id="downloads/pending_empty"
+                    fontSize="16"
+                    textColor="@theme/brls/text_disabled"
+                    marginLeft="16"
+                    marginBottom="8" />
+
+                <brls:Header id="downloads/finished_header" marginTop="12" />
+                <brls:Box id="downloads/finished" width="auto" height="auto" axis="column" />
+                <brls:Label
+                    id="downloads/finished_empty"
+                    fontSize="16"
+                    textColor="@theme/brls/text_disabled"
+                    marginLeft="16" />
+            </brls:Box>
+        </brls:ScrollingFrame>
+    </brls:Box>
+</brls:AppletFrame>

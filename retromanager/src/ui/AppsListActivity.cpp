@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "retromanager/core/Format.hpp"
-#include "retromanager/ui/DownloadActivity.hpp"
+#include "retromanager/ui/DownloadsActivity.hpp"
 
 namespace rm::ui {
 
@@ -32,7 +32,7 @@ struct AppSection {
 class AppsDataSource : public brls::RecyclerDataSource {
   public:
     AppsDataSource(std::vector<AppSection> sections, std::shared_ptr<const std::map<std::string, AppState>> states,
-                   AppManager& apps, DownloadService& downloads, EventBus& bus)
+                   AppManager& apps, DownloadQueueManager& downloads, EventBus& bus)
         : sections_(std::move(sections)), states_(std::move(states)), apps_(apps), downloads_(downloads), bus_(bus) {}
 
     int numberOfSections(brls::RecyclerFrame*) override { return static_cast<int>(sections_.size()); }
@@ -51,14 +51,15 @@ class AppsDataSource : public brls::RecyclerDataSource {
         cell->description->setText(app.description);
         cell->description->setVisibility(app.description.empty() ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
         auto state = states_->find(app.id);
-        cell->setState(state != states_->end() ? state->second : AppState::NotInstalled);
+        cell->setState(state != states_->end() ? state->second : AppState::NotInstalled, downloads_.isQueued(app.id));
         return cell;
     }
 
     void didSelectRowAt(brls::RecyclerFrame*, brls::IndexPath index) override {
         const AppEntry& app = at(index);
-        brls::Logger::info("App selected: {} {} [{}] {}", app.title, app.version, app.id, app.nroUrl);
-        brls::Application::pushActivity(new DownloadActivity(downloads_, bus_, DownloadRequest::forApp(downloads_, apps_, app)));
+        brls::Logger::info("App queued: {} {} [{}] {}", app.title, app.version, app.id, app.nroUrl);
+        downloads_.start(apps_.job(app));
+        brls::Application::notify(brls::getStr("retromanager/downloads/queued", app.title));
     }
 
   private:
@@ -69,7 +70,7 @@ class AppsDataSource : public brls::RecyclerDataSource {
     std::vector<AppSection> sections_;
     std::shared_ptr<const std::map<std::string, AppState>> states_;
     AppManager& apps_;
-    DownloadService& downloads_;
+    DownloadQueueManager& downloads_;
     EventBus& bus_;
 };
 
@@ -91,16 +92,20 @@ AppCell::AppCell() { this->inflateFromXMLRes("xml/cells/app_cell.xml"); }
 
 AppCell* AppCell::create() { return new AppCell(); }
 
-void AppCell::setState(AppState state) {
-    switch (state) {
-        case AppState::NotInstalled: tag->setVisibility(brls::Visibility::GONE); return;
-        case AppState::Installed: tag->setText(brls::getStr("retromanager/shop/installed")); break;
-        case AppState::UpdateAvailable: tag->setText(brls::getStr("retromanager/apps/update")); break;
+void AppCell::setState(AppState state, bool queued) {
+    if (queued) {
+        tag->setText(brls::getStr("retromanager/downloads/tag_queued"));
+    } else {
+        switch (state) {
+            case AppState::NotInstalled: tag->setVisibility(brls::Visibility::GONE); return;
+            case AppState::Installed: tag->setText(brls::getStr("retromanager/shop/installed")); break;
+            case AppState::UpdateAvailable: tag->setText(brls::getStr("retromanager/apps/update")); break;
+        }
     }
     tag->setVisibility(brls::Visibility::VISIBLE);
 }
 
-AppsListActivity::AppsListActivity(ShopService& shop, AppManager& apps, DownloadService& downloads, EventBus& bus)
+AppsListActivity::AppsListActivity(ShopService& shop, AppManager& apps, DownloadQueueManager& downloads, EventBus& bus)
     : shop_(shop), apps_(apps), downloads_(downloads), bus_(bus) {}
 
 AppsListActivity::~AppsListActivity() { *alive_ = false; }
@@ -113,6 +118,21 @@ void AppsListActivity::onContentAvailable() {
         return cell;
     });
     downloadFinished_ = bus_.subscribe<DownloadFinished>([this](const DownloadFinished& e) { onDownloadFinished(e); });
+    queueChanged_ = bus_.subscribe<DownloadQueueChanged>([this](const DownloadQueueChanged&) { refreshTags(); });
+    getContentView()->registerAction(brls::getStr("retromanager/downloads/title"), brls::BUTTON_Y, [this](brls::View*) {
+        brls::Application::pushActivity(new DownloadsActivity(downloads_, bus_));
+        return true;
+    });
+    updateAllButton_->registerClickAction([this](brls::View*) {
+        auto apps = updatable();
+        for (const AppEntry& app : apps) downloads_.start(apps_.job(app));
+        brls::Logger::info("App store: {} updates queued", apps.size());
+        if (!apps.empty()) {
+            brls::Application::notify(brls::getStr("retromanager/apps/updates_queued", std::to_string(apps.size())));
+            brls::Application::giveFocus(recycler);  // the button disappears
+        }
+        return true;
+    });
 
     statusLabel->setText(brls::getStr("retromanager/shop/loading", shop_.sourceDescription()));
     brls::Application::giveFocus(statusLabel);
@@ -158,15 +178,41 @@ void AppsListActivity::showApps(std::vector<AppEntry> apps) {
     recycler->setVisibility(brls::Visibility::VISIBLE);
     recycler->setDataSource(new AppsDataSource(std::move(sections), states_, apps_, downloads_, bus_));
     brls::Application::giveFocus(recycler);
+    updateAllButton();
+}
+
+std::vector<AppEntry> AppsListActivity::updatable() const {
+    std::vector<AppEntry> apps;
+    for (const AppEntry& app : entries_) {
+        auto state = states_->find(app.id);
+        if (state != states_->end() && state->second == AppState::UpdateAvailable && !downloads_.isQueued(app.id)) {
+            apps.push_back(app);
+        }
+    }
+    return apps;
+}
+
+void AppsListActivity::updateAllButton() {
+    std::size_t count = updatable().size();
+    if (count == 0 && brls::Application::getCurrentFocus() == updateAllButton_) brls::Application::giveFocus(recycler);
+    updateAllButton_->setText(brls::getStr(count == 1 ? "retromanager/apps/update_one" : "retromanager/apps/update_all",
+                                           std::to_string(count)));
+    updateAllButton_->setVisibility(count > 0 ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+}
+
+void AppsListActivity::refreshTags() {
+    if (entries_.empty()) return;
+    for (AppCell* cell : cells_) {
+        auto state = states_->find(cell->appId);
+        if (state != states_->end()) cell->setState(state->second, downloads_.isQueued(cell->appId));
+    }
+    updateAllButton();
 }
 
 void AppsListActivity::onDownloadFinished(const DownloadFinished& event) {
     if (!event.result.ok() || entries_.empty()) return;
     *states_ = apps_.states(entries_);  // installed, or no longer an update
-    for (AppCell* cell : cells_) {
-        auto state = states_->find(cell->appId);
-        if (state != states_->end()) cell->setState(state->second);
-    }
+    refreshTags();
 }
 
 }  // namespace rm::ui

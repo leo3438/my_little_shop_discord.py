@@ -7,7 +7,7 @@
 #include "retromanager/core/Crc32.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/services/AppManager.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 
 using namespace rm;
 
@@ -16,7 +16,8 @@ namespace {
 const std::string kNroUrl = "ftp://mock.local/shop/apps/RetroArch/retroarch_switch.nro";
 const std::string kIconUrl = "ftp://mock.local/shop/apps/RetroArch/icon.jpg";
 const char* kNro = "/switch/RetroArch/RetroArch.nro";
-const char* kIcon = "/switch/RetroArch/icon.jpg";
+const char* kIcon = "/switch/RetroArch/RetroArch.jpg";  // hbmenu: same name as the .nro
+const char* kIconAlias = "/switch/RetroArch/icon.jpg";
 
 // An NRO starts with a 16-byte "start" block, then the "NRO0" header.
 std::string nro(const std::string& body = "RetroArch 1.19.1") { return std::string(0x10, '\0') + "NRO0" + body; }
@@ -47,7 +48,7 @@ struct Fixture {
     EventBus bus{mainThread};
     RomStore store{*sd, SdLayout{}};
     NullSystem system;
-    DownloadService downloads{shop, store, bus, system, std::make_unique<ImmediateTaskRunner>()};
+    DownloadQueueManager downloads{shop, store, bus, system, std::make_unique<ImmediateTaskRunner>()};
     AppManager apps{*sd, SdLayout{}, shop};
     std::optional<DownloadFinished> finished;
     EventBus::Subscription sub = bus.subscribe<DownloadFinished>([this](const DownloadFinished& e) { finished = e; });
@@ -79,6 +80,7 @@ TEST(AppManager, InstallsInTheStandardHomebrewLayout) {
     EXPECT_EQ(f.apps.folderFor(retroArch()).value(), "/switch/RetroArch");
     EXPECT_EQ(f.apps.nroPathFor(retroArch()).value(), kNro);
     EXPECT_EQ(f.apps.iconPathFor(retroArch()).value(), kIcon);
+    EXPECT_EQ(f.apps.iconAliasPathFor(retroArch()).value(), kIconAlias);
 
     AppEntry evil = retroArch();
     evil.folder = "..";
@@ -90,6 +92,7 @@ TEST(AppManager, InstallsInTheStandardHomebrewLayout) {
 TEST(AppManager, DownloadsTheNroAndItsIcon) {
     Fixture f;
     EXPECT_EQ(f.apps.state(retroArch()), AppState::NotInstalled);
+    EXPECT_EQ(f.apps.job(retroArch()).kind, DownloadKind::App);
 
     const DownloadFinished& done = f.install(retroArch());
 
@@ -98,6 +101,7 @@ TEST(AppManager, DownloadsTheNroAndItsIcon) {
     EXPECT_EQ(done.itemId, "app/RetroArch");
     EXPECT_EQ(f.sd->readFile(kNro).value(), nro());
     EXPECT_EQ(f.sd->readFile(kIcon).value(), kJpeg);
+    EXPECT_EQ(f.sd->readFile(kIconAlias).value(), kJpeg);  // both conventions
     ASSERT_NE(step(done, "icon"), nullptr);
     EXPECT_TRUE(step(done, "icon")->result.ok());
     EXPECT_EQ(f.apps.state(retroArch()), AppState::Installed);
@@ -112,6 +116,7 @@ TEST(AppManager, WithoutIconOnlyTheNroIsInstalled) {
     ASSERT_TRUE(done.result.ok());
     EXPECT_EQ(step(done, "icon"), nullptr);
     EXPECT_FALSE(f.sd->exists(kIcon));
+    EXPECT_FALSE(f.sd->exists(kIconAlias));
 }
 
 TEST(AppManager, SomethingThatIsNotAnNroIsNeverInstalled) {

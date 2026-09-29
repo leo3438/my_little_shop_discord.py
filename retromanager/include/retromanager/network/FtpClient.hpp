@@ -47,6 +47,9 @@ class FtpClient : public IRemoteSource {
     Result<std::string> fetchIndex() override;
     Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                         const CancellationToken& cancel) override;
+    // REST <offset>: a server that refuses it gives Unsupported.
+    Status downloadFileFrom(const std::string& url, std::uint64_t offset, const ChunkSink& sink,
+                            const ProgressCallback& progress, const CancellationToken& cancel) override;
     Result<std::vector<RemoteEntry>> listDirectory(const std::string& url) override;
     // Uploads to a hidden ".<name>.tmp" next to the target, then renames it
     // (RNFR/RNTO) once complete.

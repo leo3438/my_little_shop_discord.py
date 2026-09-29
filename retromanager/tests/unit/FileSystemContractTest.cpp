@@ -158,6 +158,81 @@ TYPED_TEST(FileSystemContract, AbandonedWriteKeepsPreviousContent) {
     EXPECT_EQ(this->fs.listDirectory("/").value().size(), 1u);
 }
 
+// --- resumable writes (interrupted downloads) ------------------------------
+
+TYPED_TEST(FileSystemContract, SuspendedWriteKeepsItsBytesForAResume) {
+    this->mkdirs("/roms/nds");
+    {
+        auto stream = this->fs.openWrite("/roms/nds/Game.nds");
+        ASSERT_TRUE(stream.ok());
+        EXPECT_EQ(stream.value()->resumedFrom(), 0u);
+        ASSERT_TRUE(stream.value()->write("hello", 5).ok());
+        ASSERT_TRUE(stream.value()->suspend().ok());  // connection lost: keep what we have
+    }
+    EXPECT_FALSE(this->fs.exists("/roms/nds/Game.nds"));            // still not published
+    EXPECT_TRUE(this->fs.listDirectory("/roms/nds").value().empty());  // staging stays hidden
+    auto partial = this->fs.stat(stagingPath("/roms/nds/Game.nds"));
+    ASSERT_TRUE(partial.ok()) << partial.error().describe();
+    EXPECT_EQ(partial.value().size, 5u);
+    EXPECT_EQ(this->fs.readFile(stagingPath("/roms/nds/Game.nds")).value(), "hello");
+
+    auto resumed = this->fs.openWrite("/roms/nds/Game.nds", WriteOptions{true});
+    ASSERT_TRUE(resumed.ok());
+    EXPECT_EQ(resumed.value()->resumedFrom(), 5u);
+    ASSERT_TRUE(resumed.value()->write(" world", 6).ok());
+    ASSERT_TRUE(resumed.value()->close().ok());
+    EXPECT_EQ(this->fs.readFile("/roms/nds/Game.nds").value(), "hello world");
+    EXPECT_FALSE(this->fs.exists(stagingPath("/roms/nds/Game.nds")));
+}
+
+TYPED_TEST(FileSystemContract, ResumeWithoutPartialFileStartsEmpty) {
+    auto stream = this->fs.openWrite("/a.bin", WriteOptions{true});
+    ASSERT_TRUE(stream.ok());
+    EXPECT_EQ(stream.value()->resumedFrom(), 0u);
+    ASSERT_TRUE(stream.value()->write("x", 1).ok());
+    ASSERT_TRUE(stream.value()->close().ok());
+    EXPECT_EQ(this->fs.readFile("/a.bin").value(), "x");
+}
+
+TYPED_TEST(FileSystemContract, AFreshWriteDiscardsAnOldPartialFile) {
+    {
+        auto stream = this->fs.openWrite("/a.bin");
+        ASSERT_TRUE(stream.value()->write("stale", 5).ok());
+        ASSERT_TRUE(stream.value()->suspend().ok());
+    }
+    auto fresh = this->fs.openWrite("/a.bin");
+    ASSERT_TRUE(fresh.ok());
+    EXPECT_EQ(fresh.value()->resumedFrom(), 0u);
+    ASSERT_TRUE(fresh.value()->write("new", 3).ok());
+    ASSERT_TRUE(fresh.value()->close().ok());
+    EXPECT_EQ(this->fs.readFile("/a.bin").value(), "new");
+}
+
+TYPED_TEST(FileSystemContract, AbandoningAResumedWriteDiscardsThePartialFile) {
+    this->write("/a.bin", "previous version");
+    {
+        auto stream = this->fs.openWrite("/a.bin");
+        ASSERT_TRUE(stream.value()->write("part", 4).ok());
+        ASSERT_TRUE(stream.value()->suspend().ok());
+    }
+    {
+        auto resumed = this->fs.openWrite("/a.bin", WriteOptions{true});
+        ASSERT_TRUE(resumed.ok());
+        ASSERT_TRUE(resumed.value()->write("more", 4).ok());
+        // destroyed without close() nor suspend(): the user cancelled
+    }
+    EXPECT_FALSE(this->fs.exists(stagingPath("/a.bin")));
+    EXPECT_EQ(this->fs.readFile("/a.bin").value(), "previous version");
+}
+
+TYPED_TEST(FileSystemContract, ASuspendedStreamIsClosed) {
+    auto stream = this->fs.openWrite("/a.bin");
+    ASSERT_TRUE(stream.value()->suspend().ok());
+    EXPECT_FALSE(stream.value()->write("x", 1).ok());
+    EXPECT_FALSE(stream.value()->close().ok());
+    EXPECT_FALSE(stream.value()->suspend().ok());
+}
+
 TYPED_TEST(FileSystemContract, WriteRequiresExistingParent) {
     auto stream = this->fs.openWrite("/missing/dir/file.txt");
     ASSERT_FALSE(stream.ok());

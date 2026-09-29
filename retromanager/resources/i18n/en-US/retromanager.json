@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 7 - Emulators & homebrews",
+        "version": "v{} - Phase 8 - Download queue",
         "shop": "Shop: {}",
         "saves": "Cloud saves: {}",
         "saves_not_configured": "Cloud saves: not configured (saves_url)"
@@ -63,7 +63,7 @@
         "step_boxart_missing": "Box art skipped: RetroArch missing or image not found on the server.",
         "step_boxart_failed": "Cannot install the box art ({}).",
         "app_done": "Application installed in {}",
-        "step_icon_ok": "Icon installed ({}).",
+        "step_icon_ok": "Icon installed in {}.",
         "step_icon_missing": "Icon not found on the server.",
         "step_icon_failed": "Cannot install the icon ({}).",
         "step_record_failed": "Installed version not recorded ({})."
@@ -119,6 +119,33 @@
         "homebrews": "Homebrews",
         "by": "by {}",
         "update": "UPDATE",
-        "empty": "This shop offers no application (\"apps\" / \"emulators\" sections of the index)."
+        "empty": "This shop offers no application (\"apps\" / \"emulators\" sections of the index).",
+        "update_all": "Update {} applications",
+        "update_one": "Update {} application",
+        "updates_queued": "{} update(s) queued"
+    },
+    "downloads": {
+        "title": "Downloads",
+        "title_count": "Downloads ({})",
+        "current": "In progress",
+        "idle": "Nothing is downloading.",
+        "pending": "Queued ({})",
+        "pending_empty": "The queue is empty: pick games or applications, they will download one after another.",
+        "finished": "Finished ({})",
+        "finished_empty": "Nothing yet.",
+        "remove_hint": "A: remove",
+        "removed": "Removed from the queue: {}",
+        "cancel_current": "Cancel current",
+        "cancelled": "Cancelled",
+        "state_done": "Installed",
+        "state_failed": "Failed (A: details)",
+        "queued": "Queued: {}",
+        "tag_queued": "QUEUED",
+        "notify_done": "Installed: {}",
+        "notify_failed": "Failed: {}",
+        "kind_rom": "Game",
+        "kind_app": "Application",
+        "resumed": "resumed at {}",
+        "error_network_resumable": "The connection to the NAS was lost. Start the download again: it will resume where it stopped."
     }
 }

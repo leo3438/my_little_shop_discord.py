@@ -11,7 +11,7 @@
 #include "retromanager/network/IRemoteSource.hpp"
 #include "retromanager/platform/IFileSystem.hpp"
 #include "retromanager/platform/SdLayout.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 
 namespace rm {
 
@@ -23,9 +23,10 @@ enum class AppState {
 
 // The personal homebrew store: installs .nro files from the shop in the
 // standard hbmenu layout, /switch/<folder>/<folder>.nro, with an optional
-// /switch/<folder>/icon.jpg.
+// icon: /switch/<folder>/<folder>.jpg (hbmenu shows it for a .nro without
+// an embedded icon) and the same image as icon.jpg.
 //
-// Downloads go through DownloadService (job()): same streamed, staged and
+// Downloads go through DownloadQueueManager (job()): same streamed, staged and
 // space-checked pipeline as ROMs, plus an NRO header check (an HTML error
 // page or a truncated file never replaces a working homebrew). The version
 // installed is recorded in /switch/RetroManager/apps.json to detect updates.
@@ -38,7 +39,8 @@ class AppManager {
 
     Result<std::string> folderFor(const AppEntry& app) const;
     Result<std::string> nroPathFor(const AppEntry& app) const;
-    Result<std::string> iconPathFor(const AppEntry& app) const;
+    Result<std::string> iconPathFor(const AppEntry& app) const;       // <folder>/<folder>.jpg
+    Result<std::string> iconAliasPathFor(const AppEntry& app) const;  // <folder>/icon.jpg
     std::string recordPath() const { return layout_.appDataDir + "/apps.json"; }
 
     AppState state(const AppEntry& app);
@@ -47,7 +49,7 @@ class AppManager {
     // Version recorded when RetroManager installed it; nullopt if unknown.
     std::optional<std::string> installedVersion(const AppEntry& app);
 
-    // The download of `app`, to hand to DownloadService::start(). Its
+    // The download of `app`, to hand to DownloadQueueManager::start(). Its
     // follow-up: the icon ("icon" step), then the version record ("record"
     // step, reported only if it fails).
     DownloadJob job(const AppEntry& app);

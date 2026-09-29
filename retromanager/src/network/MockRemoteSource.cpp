@@ -222,16 +222,25 @@ Status MockRemoteSource::uploadFile(const std::string& target, const ChunkReader
 
 Status MockRemoteSource::downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                                       const CancellationToken& cancel) {
+    return downloadFileFrom(url, 0, sink, progress, cancel);
+}
+
+Status MockRemoteSource::downloadFileFrom(const std::string& url, std::uint64_t offset, const ChunkSink& sink,
+                                          const ProgressCallback& progress, const CancellationToken& cancel) {
     ++downloadCount_;
+    lastOffset_ = offset;
     if (latency_.count() > 0) std::this_thread::sleep_for(latency_);
     if (failure_) return *failure_;
 
     auto it = files_.find(canonical(url));
     if (it == files_.end()) return makeError(ErrorCode::NotFound, "mock: no such file " + url);
     const File& file = it->second;
+    if (offset > 0 && (!resumeSupported_ || offset > file.size)) {
+        return makeError(ErrorCode::Unsupported, "mock: REST " + std::to_string(offset) + " refused");
+    }
 
     std::vector<char> chunk(chunkSize_);
-    std::uint64_t sent = 0;
+    std::uint64_t sent = offset;
     auto begin = std::chrono::steady_clock::now();
     while (sent < file.size) {
         if (cancel.isCancelled()) return makeError(ErrorCode::Cancelled, "download cancelled");
@@ -248,7 +257,7 @@ Status MockRemoteSource::downloadFile(const std::string& url, const ChunkSink& s
         if (progress) progress(TransferProgress{sent, file.size});
 
         if (throughput_ > 0) {  // sleep until the simulated link would have carried `sent` bytes
-            auto due = begin + std::chrono::microseconds(sent * 1000000 / throughput_);
+            auto due = begin + std::chrono::microseconds((sent - offset) * 1000000 / throughput_);
             std::this_thread::sleep_until(due);
         }
     }

@@ -9,18 +9,19 @@
 #include "retromanager/core/EventBus.hpp"
 #include "retromanager/core/Result.hpp"
 #include "retromanager/models/GameEntry.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
 
 namespace rm::ui {
 
-// One game row: title + "region · year · size", and an "Installed" tag.
+// One game row: title + "region · year · size", and an "Installed" or
+// "Queued" tag.
 class GameCell : public brls::RecyclerCell {
   public:
     GameCell();
     static GameCell* create();
 
-    void setInstalled(bool installed);
+    void setState(bool installed, bool queued);
 
     std::string gameId;  // game currently bound to this (recycled) cell
 
@@ -29,12 +30,12 @@ class GameCell : public brls::RecyclerCell {
     BRLS_BIND(brls::Label, installedTag, "game/installed");
 };
 
-// Shop contents, one section per system. Talks to services only (ShopService
-// for the index, DownloadService when a game is picked): it never sees the
-// transport, the parser nor the SD card.
+// Shop contents, one section per system. Picking a game queues it (the
+// download runs in the background; Y opens the downloads screen). Talks to
+// services only: it never sees the transport, the parser nor the SD card.
 class GamesListActivity : public brls::Activity {
   public:
-    GamesListActivity(ShopService& shop, DownloadService& downloads, EventBus& bus);
+    GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus);
     ~GamesListActivity() override;
 
     CONTENT_FROM_XML_RES("activity/games_list.xml");
@@ -45,10 +46,11 @@ class GamesListActivity : public brls::Activity {
     void load();
     void showListing(const ShopListing& listing);
     void onDownloadFinished(const DownloadFinished& event);
+    void refreshTags();
     void showError(const Error& error);
 
     ShopService& shop_;
-    DownloadService& downloads_;
+    DownloadQueueManager& downloads_;
     EventBus& bus_;
     // Cleared on destruction: a load finishing after the user left the
     // screen must not touch the destroyed views. Both the destructor and
@@ -61,7 +63,7 @@ class GamesListActivity : public brls::Activity {
     // download refresh the visible row without reloadData(), which would
     // scroll the list back to the top.
     std::vector<GameCell*> cells_;
-    EventBus::Subscription downloadFinished_;
+    EventBus::Subscription downloadFinished_, queueChanged_;
 
     BRLS_BIND(brls::Label, statusLabel, "games/status");
     BRLS_BIND(brls::Label, detailLabel, "games/detail");

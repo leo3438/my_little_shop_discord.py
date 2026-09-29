@@ -35,10 +35,10 @@ SpaceReport RomStore::spaceReport(const GameEntry& game) {
     return checkSpace(fs_, destination.ok() ? destination.value() : layout_.romsDir + "/x", game.sizeBytes);
 }
 
-Result<std::unique_ptr<FileInstall>> RomStore::beginInstall(const GameEntry& game) {
+Result<std::unique_ptr<FileInstall>> RomStore::beginInstall(const GameEntry& game, bool resume) {
     auto destination = destinationFor(game);
     if (!destination) return destination.error();
-    return beginFileInstall(fs_, destination.value(), game.sizeBytes, game.crc32, game.title);
+    return beginFileInstall(fs_, destination.value(), game.sizeBytes, game.crc32, game.title, resume);
 }
 
 }  // namespace rm

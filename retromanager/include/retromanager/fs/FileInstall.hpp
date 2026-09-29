@@ -33,15 +33,28 @@ SpaceReport checkSpace(IFileSystem& fs, const std::string& destination, std::uin
 // through a 1 MiB buffer into a hidden staging file (".Game.nds.tmp"),
 // which replaces the final file only on a successful commit(). Destroying
 // an uncommitted install deletes the staging file: cancellation and errors
-// never leave partial files.
+// never leave partial files. suspend() instead keeps it, so that a later
+// install of the same file resumes where the transfer stopped.
 class FileInstall {
   public:
-    FileInstall(std::string destination, std::unique_ptr<BufferedWriteStream> stream, std::string expectedCrc32);
+    FileInstall(IFileSystem& fs, std::string destination, std::unique_ptr<BufferedWriteStream> stream,
+                std::string expectedCrc32);
 
     // `check` sees the first `bytes` bytes as soon as they are received; its
     // error fails that write (the transfer stops early: an HTML error page
     // is not downloaded to the end) and a shorter file fails at commit().
+    // A resumed partial file whose header fails is discarded (restart()).
     void setHeaderCheck(std::size_t bytes, std::function<Status(std::string_view)> check);
+
+    // Bytes already in the staging file when resuming (0 for a fresh install).
+    std::uint64_t resumedFrom() const { return resumedFrom_; }
+
+    // Drops the partial content and starts again from an empty file (the
+    // server refused to resume).
+    Status restart();
+
+    // Keeps the staging file for a later resume; the install is over.
+    Status suspend();
 
     Status write(const char* data, std::size_t size);
 
@@ -55,13 +68,20 @@ class FileInstall {
 
   private:
     Status checkHeaderIfComplete();
+    friend Result<std::unique_ptr<FileInstall>> beginFileInstall(IFileSystem&, const std::string&, std::uint64_t,
+                                                                 std::string, const std::string&, bool);
+    Status primeFromPartial(std::uint64_t size);  // CRC and header of the bytes already there
 
+    IFileSystem& fs_;
     std::string destination_;
     std::unique_ptr<BufferedWriteStream> stream_;
     std::string expectedCrc32_;
     Crc32 crc_;
     std::uint64_t written_ = 0;
     bool finished_ = false;
+
+    std::uint64_t resumedFrom_ = 0;
+    std::string prefix_;  // first bytes of a resumed partial file (header check)
 
     std::size_t headerBytes_ = 0;
     std::function<Status(std::string_view)> headerCheck_;
@@ -72,8 +92,12 @@ class FileInstall {
 // Space check (InsufficientSpace with the numbers, `what` naming the item
 // in the message), parent folder creation, staged buffered output. Nothing
 // is created on the card when the check fails.
+//
+// `resume`: continue the partial staging file a suspended install left, if
+// any and not larger than `sizeBytes` (when known). Its bytes are read back
+// once to keep the CRC-32 of the whole file right.
 Result<std::unique_ptr<FileInstall>> beginFileInstall(IFileSystem& fs, const std::string& destination,
                                                       std::uint64_t sizeBytes, std::string expectedCrc32,
-                                                      const std::string& what);
+                                                      const std::string& what, bool resume = false);
 
 }  // namespace rm

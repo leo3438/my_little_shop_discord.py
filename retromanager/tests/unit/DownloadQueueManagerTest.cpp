@@ -8,7 +8,7 @@
 #include "retromanager/core/Crc32.hpp"
 #include "retromanager/core/WorkerThread.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 
 using namespace rm;
 
@@ -67,7 +67,7 @@ struct Fixture {
     ImmediateTaskRunner mainThread;
     EventBus bus{mainThread};
     FakeSystem system;
-    DownloadService downloads{source, store, bus, system, std::make_unique<ImmediateTaskRunner>()};
+    DownloadQueueManager downloads{source, store, bus, system, std::make_unique<ImmediateTaskRunner>()};
 
     std::vector<DownloadStarted> started;
     std::vector<DownloadProgressed> progress;
@@ -179,9 +179,9 @@ TEST(MockRemoteSourceDownload, ErrorsAndCancellation) {
     EXPECT_EQ(source.downloadFile(kUrl, ignore, nullptr, cancel).error().code, ErrorCode::NetworkError);
 }
 
-// --- DownloadService -----------------------------------------------------
+// --- DownloadQueueManager -----------------------------------------------------
 
-TEST(DownloadService, DownloadsToTheSdCardAndReportsEachStep) {
+TEST(DownloadQueueManager, DownloadsToTheSdCardAndReportsEachStep) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 3 * 1024 * 1024 + 123);
 
@@ -204,7 +204,7 @@ TEST(DownloadService, DownloadsToTheSdCardAndReportsEachStep) {
     EXPECT_EQ(f.downloads.activeCount(), 0u);
 }
 
-TEST(DownloadService, ProgressEventsAreThrottled) {
+TEST(DownloadQueueManager, ProgressEventsAreThrottled) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 8 * 1024 * 1024);
     f.source.setChunkSize(4096);  // 2048 chunks, all delivered within a few ms
@@ -216,7 +216,7 @@ TEST(DownloadService, ProgressEventsAreThrottled) {
     EXPECT_EQ(f.progress.back().received, 8u * 1024 * 1024);  // the final state is always published
 }
 
-TEST(DownloadService, InsufficientSpaceFailsBeforeAnyNetworkAccess) {
+TEST(DownloadQueueManager, InsufficientSpaceFailsBeforeAnyNetworkAccess) {
     Fixture f;
     f.fs.setCapacity(10 * 1024 * 1024);
     f.source.addSyntheticFile(kUrl, 128 * 1024 * 1024);
@@ -231,7 +231,7 @@ TEST(DownloadService, InsufficientSpaceFailsBeforeAnyNetworkAccess) {
     EXPECT_FALSE(f.fs.exists("/roms/nds"));
 }
 
-TEST(DownloadService, CancelMidTransferCleansUp) {
+TEST(DownloadQueueManager, CancelMidTransferCleansUp) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 4 * 1024 * 1024);
     f.source.setChunkSize(64 * 1024);
@@ -248,7 +248,7 @@ TEST(DownloadService, CancelMidTransferCleansUp) {
     EXPECT_EQ(f.fs.usedBytes(), 0u);
 }
 
-TEST(DownloadService, CancelledPreviousVersionSurvives) {
+TEST(DownloadQueueManager, CancelledPreviousVersionSurvives) {
     Fixture f;
     ASSERT_TRUE(f.fs.createDirectories("/roms/nds").ok());
     ASSERT_TRUE(f.fs.writeFile("/roms/nds/Game.nds", "old version").ok());
@@ -262,7 +262,7 @@ TEST(DownloadService, CancelledPreviousVersionSurvives) {
     EXPECT_EQ(f.fs.readFile("/roms/nds/Game.nds").value(), "old version");
 }
 
-TEST(DownloadService, IntegrityFailureDiscardsTheFile) {
+TEST(DownloadQueueManager, IntegrityFailureDiscardsTheFile) {
     Fixture f;
     f.source.addFile(kUrl, "123456789");
     GameEntry entry = game(9);
@@ -275,7 +275,7 @@ TEST(DownloadService, IntegrityFailureDiscardsTheFile) {
     EXPECT_FALSE(f.fs.exists("/roms/nds/Game.nds"));
 }
 
-TEST(DownloadService, UnsafeFileNameIsRejected) {
+TEST(DownloadQueueManager, UnsafeFileNameIsRejected) {
     Fixture f;
     GameEntry entry = game(10);
     entry.fileName = "..";
@@ -285,7 +285,7 @@ TEST(DownloadService, UnsafeFileNameIsRejected) {
     EXPECT_EQ(f.source.downloadCount(), 0);
 }
 
-TEST(DownloadService, RunsOnItsWorkerAndJoinsOnDestruction) {
+TEST(DownloadQueueManager, RunsOnItsWorkerAndJoinsOnDestruction) {
     test::MemoryFileSystem fs;
     MockRemoteSource source("{}", "");
     source.addSyntheticFile(kUrl, 64 * 1024 * 1024);
@@ -312,7 +312,7 @@ TEST(DownloadService, RunsOnItsWorkerAndJoinsOnDestruction) {
     auto begin = std::chrono::steady_clock::now();
     {
         NullSystem system;
-        DownloadService downloads(source, store, bus, system,
+        DownloadQueueManager downloads(source, store, bus, system,
                                   std::make_unique<WorkerThread>([&](std::function<void()> t) { mainThread.runOnMainThread(t); }));
         downloads.start(game(64 * 1024 * 1024));
         EXPECT_EQ(downloads.activeCount(), 1u);  // start() returned while the transfer runs
@@ -326,7 +326,7 @@ TEST(DownloadService, RunsOnItsWorkerAndJoinsOnDestruction) {
 
 // --- keep awake ------------------------------------------------------------
 
-TEST(DownloadService, KeepsTheConsoleAwakeDuringTheTransferOnly) {
+TEST(DownloadQueueManager, KeepsTheConsoleAwakeDuringTheTransferOnly) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 1024 * 1024);
     bool awakeWhileTransferring = false;
@@ -340,7 +340,7 @@ TEST(DownloadService, KeepsTheConsoleAwakeDuringTheTransferOnly) {
     EXPECT_FALSE(f.system.awake);
 }
 
-TEST(DownloadService, ReleasesTheAwakeLockOnEveryFailurePath) {
+TEST(DownloadQueueManager, ReleasesTheAwakeLockOnEveryFailurePath) {
     {  // cancelled
         Fixture f;
         f.source.addSyntheticFile(kUrl, 4 * 1024 * 1024);
@@ -381,7 +381,7 @@ TEST(AwakeLock, IsReferenceCounted) {
 
 // --- post-install steps ----------------------------------------------------
 
-TEST(DownloadService, RunsPostInstallStepsAfterTheRomIsCommitted) {
+TEST(DownloadQueueManager, RunsPostInstallStepsAfterTheRomIsCommitted) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 1000);
     FakeStep retroarch("retroarch", success());
@@ -409,7 +409,7 @@ TEST(DownloadService, RunsPostInstallStepsAfterTheRomIsCommitted) {
     EXPECT_EQ(f.order.back(), "finished");
 }
 
-TEST(DownloadService, AFailingStepNeverUndoesTheInstall) {
+TEST(DownloadQueueManager, AFailingStepNeverUndoesTheInstall) {
     Fixture f;
     f.source.addSyntheticFile(kUrl, 1000);
     FakeStep broken("retroarch", Status(makeError(ErrorCode::PermissionDenied, "cfg read-only")));
@@ -427,7 +427,7 @@ TEST(DownloadService, AFailingStepNeverUndoesTheInstall) {
     EXPECT_TRUE(f.finished[0].steps[1].result.ok());
 }
 
-TEST(DownloadService, StepsDoNotRunWhenTheInstallFails) {
+TEST(DownloadQueueManager, StepsDoNotRunWhenTheInstallFails) {
     Fixture f;
     f.source.addFile(kUrl, "123456789");
     FakeStep step("retroarch", success());
@@ -442,7 +442,7 @@ TEST(DownloadService, StepsDoNotRunWhenTheInstallFails) {
     EXPECT_EQ(std::count(f.order.begin(), f.order.end(), "configuring"), 0);
 }
 
-TEST(DownloadService, StepsSeeTheCrcMeasuredDuringTheDownload) {
+TEST(DownloadQueueManager, StepsSeeTheCrcMeasuredDuringTheDownload) {
     Fixture f;
     f.source.addFile(kUrl, "123456789");  // CRC-32 check value: cbf43926
     FakeStep playlist("playlist", success());

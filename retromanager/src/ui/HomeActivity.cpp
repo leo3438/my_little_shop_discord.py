@@ -4,12 +4,13 @@
 
 #include "retromanager/ui/AppsListActivity.hpp"
 #include "retromanager/ui/BiosActivity.hpp"
+#include "retromanager/ui/DownloadsActivity.hpp"
 #include "retromanager/ui/GamesListActivity.hpp"
 #include "retromanager/ui/SyncActivity.hpp"
 
 namespace rm::ui {
 
-HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadService& downloads,
+HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadQueueManager& downloads,
                            CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus)
     : context_(context),
       initStatus_(std::move(initStatus)),
@@ -33,6 +34,12 @@ void HomeActivity::onContentAvailable() {
         brls::Application::pushActivity(new AppsListActivity(shop_, apps_, downloads_, bus_));
         return true;
     });
+    downloadsButton->registerClickAction([this](brls::View*) {
+        brls::Application::pushActivity(new DownloadsActivity(downloads_, bus_));
+        return true;
+    });
+    queueChanged_ = bus_.subscribe<DownloadQueueChanged>([this](const DownloadQueueChanged& e) { showQueueSize(e.items.size()); });
+    showQueueSize(downloads_.activeCount());
     biosButton->registerClickAction([this](brls::View*) {
         brls::Application::pushActivity(new BiosActivity(bios_, shop_, bus_));
         return true;
@@ -53,6 +60,11 @@ void HomeActivity::onContentAvailable() {
     } else {
         retroarchLabel->setText(brls::getStr("retromanager/home/retroarch_missing"));
     }
+}
+
+void HomeActivity::showQueueSize(std::size_t count) {
+    downloadsButton->setText(count == 0 ? brls::getStr("retromanager/downloads/title")
+                                        : brls::getStr("retromanager/downloads/title_count", std::to_string(count)));
 }
 
 }  // namespace rm::ui

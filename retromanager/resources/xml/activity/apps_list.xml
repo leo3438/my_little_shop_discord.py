@@ -7,6 +7,16 @@
         axis="column"
         grow="1.0">
 
+        <!-- "Update 3 applications": queues every app tagged UPDATE. -->
+        <brls:Button
+            id="apps/update_all"
+            visibility="gone"
+            style="primary"
+            width="500"
+            marginTop="16"
+            marginBottom="4"
+            alignSelf="center" />
+
         <brls:Label
             id="games/motd"
             visibility="gone"

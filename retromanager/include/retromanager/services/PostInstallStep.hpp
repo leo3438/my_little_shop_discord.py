@@ -12,7 +12,7 @@ namespace rm {
 // Work done once a ROM is safely on the SD card: configure the emulator,
 // fetch cheats, and later scrape artwork, create a forwarder...
 //
-// DownloadService runs the registered steps in order after each successful
+// DownloadQueueManager runs the registered steps in order after each successful
 // install. A failing step never undoes the install: the ROM is there, the
 // step's error is reported next to it.
 class IPostInstallStep {

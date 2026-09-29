@@ -14,7 +14,7 @@
 namespace rm {
 
 // Where ROMs live on the SD card: /roms/<system>/<file name>.
-// Knows nothing about the network: DownloadService feeds a FileInstall.
+// Knows nothing about the network: DownloadQueueManager feeds a FileInstall.
 class RomStore {
   public:
     static constexpr std::uint64_t kSpaceMargin = rm::kSpaceMargin;
@@ -33,7 +33,7 @@ class RomStore {
     // Creates the system directory, checks free space (InsufficientSpace
     // with the numbers in the message) and opens the staged, buffered
     // output. Nothing is created on the card when the check fails.
-    Result<std::unique_ptr<FileInstall>> beginInstall(const GameEntry& game);
+    Result<std::unique_ptr<FileInstall>> beginInstall(const GameEntry& game, bool resume = false);
 
   private:
     IFileSystem& fs_;

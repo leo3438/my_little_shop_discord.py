@@ -163,8 +163,8 @@ TEST(RomStore, WritesReachTheCardInBoundedChunks) {
       public:
         std::size_t maxWrite = 0;
         std::size_t writes = 0;
-        Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path) override {
-            auto inner = MemoryFileSystem::openWrite(path);
+        Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path, WriteOptions options = {}) override {
+            auto inner = MemoryFileSystem::openWrite(path, options);
             if (!inner) return inner.error();
             class Spy : public IWriteStream {
               public:
@@ -175,6 +175,7 @@ TEST(RomStore, WritesReachTheCardInBoundedChunks) {
                     return in_->write(d, n);
                 }
                 Status close() override { return in_->close(); }
+                Status suspend() override { return in_->suspend(); }
 
               private:
                 std::unique_ptr<IWriteStream> in_;

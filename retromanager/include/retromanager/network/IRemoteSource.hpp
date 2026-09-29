@@ -63,6 +63,17 @@ class IRemoteSource {
     virtual Status downloadFile(const std::string& url, const ChunkSink& sink, const ProgressCallback& progress,
                                 const CancellationToken& cancel) = 0;
 
+    // Resumes a download: only the bytes from `offset` on reach `sink`
+    // (FTP: REST <offset> before RETR). Progress counts the whole file,
+    // offset included. Unsupported when the source or the server cannot
+    // resume (or `offset` is past the end): the caller then starts over.
+    // Default: no resume support.
+    virtual Status downloadFileFrom(const std::string& url, std::uint64_t offset, const ChunkSink& sink,
+                                    const ProgressCallback& progress, const CancellationToken& cancel) {
+        if (offset == 0) return downloadFile(url, sink, progress, cancel);
+        return makeError(ErrorCode::Unsupported, "this source cannot resume downloads");
+    }
+
     // Entries of the directory at `url` (names only, no "." / ".."), in
     // server order. NotFound when the directory does not exist.
     virtual Result<std::vector<RemoteEntry>> listDirectory(const std::string& url) = 0;

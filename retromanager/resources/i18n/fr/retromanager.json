@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 7 - Émulateurs & homebrews",
+        "version": "v{} - Phase 8 - File de téléchargements",
         "shop": "Boutique : {}",
         "saves": "Sauvegardes cloud : {}",
         "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
@@ -63,7 +63,7 @@
         "step_boxart_missing": "Jaquette ignorée : RetroArch absent ou image introuvable sur le serveur.",
         "step_boxart_failed": "Impossible d'installer la jaquette ({}).",
         "app_done": "Application installée dans {}",
-        "step_icon_ok": "Icône installée ({}).",
+        "step_icon_ok": "Icône installée dans {}.",
         "step_icon_missing": "Icône introuvable sur le serveur.",
         "step_icon_failed": "Impossible d'installer l'icône ({}).",
         "step_record_failed": "Version installée non mémorisée ({})."
@@ -119,6 +119,33 @@
         "homebrews": "Homebrews",
         "by": "par {}",
         "update": "MISE À JOUR",
-        "empty": "Cette boutique ne propose aucune application (sections \"apps\" / \"emulators\" de l'index)."
+        "empty": "Cette boutique ne propose aucune application (sections \"apps\" / \"emulators\" de l'index).",
+        "update_all": "Mettre à jour {} applications",
+        "update_one": "Mettre à jour {} application",
+        "updates_queued": "{} mise(s) à jour ajoutée(s) à la file"
+    },
+    "downloads": {
+        "title": "Téléchargements",
+        "title_count": "Téléchargements ({})",
+        "current": "En cours",
+        "idle": "Aucun téléchargement en cours.",
+        "pending": "En attente ({})",
+        "pending_empty": "La file est vide : choisissez des jeux ou des applications, ils se téléchargeront à la suite.",
+        "finished": "Terminés ({})",
+        "finished_empty": "Rien pour l'instant.",
+        "remove_hint": "A : retirer",
+        "removed": "Retiré de la file : {}",
+        "cancel_current": "Annuler en cours",
+        "cancelled": "Annulé",
+        "state_done": "Installé",
+        "state_failed": "Échec (A : détails)",
+        "queued": "Ajouté à la file : {}",
+        "tag_queued": "EN FILE",
+        "notify_done": "Installé : {}",
+        "notify_failed": "Échec : {}",
+        "kind_rom": "Jeu",
+        "kind_app": "Application",
+        "resumed": "reprise à {}",
+        "error_network_resumable": "La connexion au NAS a été perdue. Relancez le téléchargement : il reprendra là où il s'est arrêté."
     }
 }

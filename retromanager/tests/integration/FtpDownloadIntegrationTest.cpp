@@ -1,5 +1,5 @@
 // Streaming downloads against a real FTP server (tools/test_ftp_server.py):
-// FtpClient -> DownloadService -> RomStore -> LocalFileSystem on a temp dir.
+// FtpClient -> DownloadQueueManager -> RomStore -> LocalFileSystem on a temp dir.
 //
 // Skipped unless RM_TEST_FTP_PORT is set (and RM_TEST_FTPS_PORT for FTPS).
 
@@ -23,7 +23,7 @@
 #include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CheatManager.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/PlaylistManager.hpp"
 #include "retromanager/services/ShopService.hpp"
@@ -97,12 +97,12 @@ struct DownloadRun {
 };
 
 DownloadRun download(IRemoteSource& source, IFileSystem& fs, const GameEntry& game,
-             std::function<void(DownloadService&, const DownloadProgressed&)> onProgress = nullptr) {
+             std::function<void(DownloadQueueManager&, const DownloadProgressed&)> onProgress = nullptr) {
     ImmediateTaskRunner mainThread;
     EventBus bus(mainThread);
     RomStore store(fs, SdLayout{});
     NullSystem system;
-    DownloadService downloads(source, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    DownloadQueueManager downloads(source, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     DownloadRun run;
     auto p = bus.subscribe<DownloadProgressed>([&](const DownloadProgressed& e) {
         run.progress.push_back(e);
@@ -136,7 +136,7 @@ TEST_F(FtpDownload, StreamsTheBigRomWithCrcCheckAndBoundedMemory) {
     std::optional<std::uint64_t> baseline = residentBytes();
     std::uint64_t peak = baseline.value_or(0);
 
-    DownloadRun run = download(*client, fs, big, [&](DownloadService&, const DownloadProgressed&) {
+    DownloadRun run = download(*client, fs, big, [&](DownloadQueueManager&, const DownloadProgressed&) {
         if (auto rss = residentBytes()) peak = std::max(peak, *rss);
     });
 
@@ -162,7 +162,7 @@ TEST_F(FtpDownload, StreamsTheBigRomWithCrcCheckAndBoundedMemory) {
 
 TEST_F(FtpDownload, CancelMidTransferLeavesNothingBehind) {
     LocalFileSystem fs(sd.path());
-    DownloadRun run = download(*client, fs, big, [](DownloadService& downloads, const DownloadProgressed& e) {
+    DownloadRun run = download(*client, fs, big, [](DownloadQueueManager& downloads, const DownloadProgressed& e) {
         if (e.received > 0) downloads.cancel(e.id);  // B pressed during the transfer
     });
 
@@ -230,7 +230,7 @@ TEST_F(FtpDownload, DsGameEndToEndIntegratesWithRetroArch) {
     PlaylistManager playlists(fs, layout);
     ThumbnailManager thumbnails(fs, layout, *client);
     CheatManager cheats(fs, layout, *client);
-    DownloadService downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    DownloadQueueManager downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     downloads.addPostInstallStep(configurator);
     downloads.addPostInstallStep(playlists);
     downloads.addPostInstallStep(thumbnails);
@@ -309,6 +309,56 @@ TEST_F(FtpDownload, BiosFilesOfferedByTheShopAreCheckedAndInstalled) {
     }
 }
 
+TEST_F(FtpDownload, RestResumesFromAnOffset) {
+    std::string tail;
+    CancellationToken cancel;
+    std::vector<TransferProgress> ticks;
+    Status status = client->downloadFileFrom(
+        small.romUrl, 5, [&](const char* d, std::size_t n) { tail.append(d, n); return success(); },
+        [&](const TransferProgress& p) { ticks.push_back(p); }, cancel);
+    ASSERT_TRUE(status.ok()) << status.error().describe();
+    EXPECT_EQ(tail, std::string("MOCK ROM snes\n").substr(5));
+    ASSERT_FALSE(ticks.empty());
+    EXPECT_EQ(ticks.back().received, 14u);  // whole-file numbers
+
+    auto past = client->downloadFileFrom(small.romUrl, 1000, [](const char*, std::size_t) { return success(); },
+                                         nullptr, cancel);
+    EXPECT_EQ(past.error().code, ErrorCode::Unsupported);
+}
+
+TEST_F(FtpDownload, AnInterruptedBigDownloadResumesWithRest) {
+    LocalFileSystem fs(sd.path());
+    const std::uint64_t kept = 10 * 1024 * 1024;
+    const std::string destination = RomStore(fs, SdLayout{}).destinationFor(big).value();
+    {
+        // First attempt: 10 MiB arrive, then the "Wi-Fi drops".
+        auto install = RomStore(fs, SdLayout{}).beginInstall(big);
+        ASSERT_TRUE(install.ok());
+        CancellationToken cancel;
+        Status dropped = client->downloadFile(
+            big.romUrl,
+            [&](const char* d, std::size_t n) -> Status {
+                std::size_t take = static_cast<std::size_t>(std::min<std::uint64_t>(n, kept - install.value()->bytesWritten()));
+                if (Status w = install.value()->write(d, take); !w) return w;
+                if (install.value()->bytesWritten() >= kept) return makeError(ErrorCode::NetworkError, "Wi-Fi lost");
+                return success();
+            },
+            nullptr, cancel);
+        ASSERT_EQ(dropped.error().code, ErrorCode::NetworkError);
+        ASSERT_TRUE(install.value()->suspend().ok());
+    }
+    ASSERT_EQ(fs.stat(stagingPath(destination)).valueOr(FileInfo{}).size, kept);
+
+    DownloadRun run = download(*client, fs, big);  // the retry
+    ASSERT_TRUE(run.finished.has_value());
+    ASSERT_TRUE(run.finished->result.ok()) << run.finished->result.error().describe();  // CRC of the whole file
+    ASSERT_FALSE(run.progress.empty());
+    EXPECT_EQ(run.progress.front().resumedFrom, kept);
+    EXPECT_GE(run.progress.front().received, kept);
+    EXPECT_EQ(fs.stat(run.finished->destination).value().size, big.sizeBytes);
+    EXPECT_FALSE(fs.exists(stagingPath(destination)));
+}
+
 TEST_F(FtpDownload, HomebrewStoreInstallsNrosAndIcons) {
     LocalFileSystem fs(sd.path());
     ASSERT_TRUE(test::copyHostTree(test::fixtureSdCardDir(), fs).ok());
@@ -320,7 +370,7 @@ TEST_F(FtpDownload, HomebrewStoreInstallsNrosAndIcons) {
     EventBus bus(tasks);
     RomStore store(fs, SdLayout{});
     NullSystem system;
-    DownloadService downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    DownloadQueueManager downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
     AppManager apps(fs, SdLayout{}, *client);
     std::vector<DownloadFinished> finished;
     auto sub = bus.subscribe<DownloadFinished>([&](const DownloadFinished& e) { finished.push_back(e); });
@@ -336,10 +386,11 @@ TEST_F(FtpDownload, HomebrewStoreInstallsNrosAndIcons) {
         for (const StepOutcome& step : e.steps) EXPECT_TRUE(step.result.ok()) << e.itemId << " " << step.id;
     }
     EXPECT_TRUE(AppManager::validateNroHeader(fs.readFile("/switch/RetroArch/RetroArch.nro").value()).ok());
-    EXPECT_TRUE(AppManager::validateIcon(fs.readFile("/switch/RetroArch/icon.jpg").value()).ok());
+    EXPECT_TRUE(AppManager::validateIcon(fs.readFile("/switch/RetroArch/RetroArch.jpg").value()).ok());
+    EXPECT_TRUE(fs.isFile("/switch/RetroArch/icon.jpg"));
     EXPECT_TRUE(fs.isFile("/switch/melonDS/melonDS.nro"));  // "emulators" section, size asked to the server
-    EXPECT_FALSE(fs.exists("/switch/melonDS/icon.jpg"));
-    EXPECT_TRUE(fs.isFile("/switch/pNES/icon.jpg"));
+    EXPECT_FALSE(fs.exists("/switch/melonDS/melonDS.jpg"));
+    EXPECT_TRUE(fs.isFile("/switch/pNES/pNES.jpg"));
     for (const AppEntry& app : index.value().apps) EXPECT_EQ(apps.state(app), AppState::Installed) << app.title;
 
     AppEntry newer = index.value().apps[0];

@@ -16,13 +16,14 @@
 #include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/CloudSyncService.hpp"
 #include "retromanager/services/ConfigManager.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/PlaylistManager.hpp"
 #include "retromanager/services/ShopService.hpp"
 #include "retromanager/services/SysClkConfigurator.hpp"
 #include "retromanager/services/ThumbnailManager.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
+#include "retromanager/ui/DownloadNotifier.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
 
 #ifdef RM_WITH_CURL
@@ -145,7 +146,7 @@ int main(int argc, char* argv[]) {
     rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shop);
     rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.sysclk.titleId);
     rm::AppManager apps(context.fileSystem(), context.layout(), *remotes.shop);
-    rm::DownloadService downloads(*remotes.shop, romStore, bus, *platform.system,
+    rm::DownloadQueueManager downloads(*remotes.shop, romStore, bus, *platform.system,
                                   std::make_unique<rm::WorkerThread>(onMainThread));
     downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch's browser at it
     downloads.addPostInstallStep(playlists);             // list it in its system's playlist
@@ -156,6 +157,8 @@ int main(int argc, char* argv[]) {
                                    *platform.system, std::make_unique<rm::WorkerThread>(onMainThread));
     rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shop, bus,
                          std::make_unique<rm::WorkerThread>(onMainThread));
+
+    rm::ui::DownloadNotifier notifier(bus);  // "installed" / "failed", from any screen
 
     brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus));
 

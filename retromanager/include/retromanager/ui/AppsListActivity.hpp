@@ -8,7 +8,7 @@
 
 #include "retromanager/core/EventBus.hpp"
 #include "retromanager/services/AppManager.hpp"
-#include "retromanager/services/DownloadService.hpp"
+#include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
 
 namespace rm::ui {
@@ -20,7 +20,7 @@ class AppCell : public brls::RecyclerCell {
     AppCell();
     static AppCell* create();
 
-    void setState(AppState state);
+    void setState(AppState state, bool queued);
 
     std::string appId;  // app currently bound to this (recycled) cell
 
@@ -31,11 +31,12 @@ class AppCell : public brls::RecyclerCell {
 };
 
 // "Emulators & homebrews": the shop's apps / emulators sections, one
-// section each. Picking one downloads it (DownloadActivity) into
-// /switch/<name>/.
+// section each. Picking one queues its download into /switch/<name>/; the
+// "Update N applications" button queues every app with an update. Y opens
+// the downloads screen.
 class AppsListActivity : public brls::Activity {
   public:
-    AppsListActivity(ShopService& shop, AppManager& apps, DownloadService& downloads, EventBus& bus);
+    AppsListActivity(ShopService& shop, AppManager& apps, DownloadQueueManager& downloads, EventBus& bus);
     ~AppsListActivity() override;
 
     CONTENT_FROM_XML_RES("activity/apps_list.xml");
@@ -45,17 +46,21 @@ class AppsListActivity : public brls::Activity {
   private:
     void showApps(std::vector<AppEntry> apps);
     void onDownloadFinished(const DownloadFinished& event);
+    void refreshTags();
+    void updateAllButton();
+    std::vector<AppEntry> updatable() const;  // UpdateAvailable and not queued yet
 
     ShopService& shop_;
     AppManager& apps_;
-    DownloadService& downloads_;
+    DownloadQueueManager& downloads_;
     EventBus& bus_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     std::vector<AppEntry> entries_;
     std::shared_ptr<std::map<std::string, AppState>> states_ = std::make_shared<std::map<std::string, AppState>>();
     std::vector<AppCell*> cells_;
-    EventBus::Subscription downloadFinished_;
+    EventBus::Subscription downloadFinished_, queueChanged_;
 
+    BRLS_BIND(brls::Button, updateAllButton_, "apps/update_all");
     BRLS_BIND(brls::Label, statusLabel, "games/status");
     BRLS_BIND(brls::Label, detailLabel, "games/detail");
     BRLS_BIND(brls::Label, motdLabel, "games/motd");

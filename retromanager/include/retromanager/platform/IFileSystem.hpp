@@ -46,11 +46,22 @@ class IReadStream {
 // Staging file convention (see stagingPath()): "/roms/nds/.Game.nds.tmp"
 // for "/roms/nds/Game.nds", renamed over the target on close(). Staging
 // files are hidden from listings.
+//
+// Resumable writes (interrupted downloads): suspend() closes the stream but
+// keeps the staging file, still hidden and unpublished; a later
+// openWrite(path, {resume = true}) appends to it (resumedFrom() says how
+// many bytes were already there). A plain openWrite() starts from scratch.
 class IWriteStream {
   public:
     virtual ~IWriteStream() = default;
     virtual Status write(const char* data, std::size_t size) = 0;
     virtual Status close() = 0;
+    virtual Status suspend() = 0;
+    virtual std::uint64_t resumedFrom() const { return 0; }
+};
+
+struct WriteOptions {
+    bool resume = false;  // append to the staging file left by a suspended write, if any
 };
 
 // "/roms/nds/Game.nds" -> "/roms/nds/.Game.nds.tmp" (expects a normalized path).
@@ -82,7 +93,7 @@ class IFileSystem {
 
     // The parent directory must exist. Replaces an existing file atomically
     // on close().
-    virtual Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path) = 0;
+    virtual Result<std::unique_ptr<IWriteStream>> openWrite(std::string_view path, WriteOptions options = {}) = 0;
 
     // Removes a file or an empty directory.
     virtual Status remove(std::string_view path) = 0;

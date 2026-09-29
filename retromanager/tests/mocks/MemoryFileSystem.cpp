@@ -35,9 +35,16 @@ class MemoryReadStream : public IReadStream {
 }  // namespace
 
 // The filesystem must outlive its write streams.
+// Bytes stay in the stream until close() (published) or suspend() (kept as
+// the staging node, like the host's hidden .tmp file).
 class MemoryWriteStream : public IWriteStream {
   public:
-    MemoryWriteStream(MemoryFileSystem& fs, std::string path) : fs_(fs), path_(std::move(path)) {}
+    MemoryWriteStream(MemoryFileSystem& fs, std::string path, std::string resumed)
+        : fs_(fs), path_(std::move(path)), buffer_(std::move(resumed)), resumedFrom_(buffer_.size()) {}
+
+    ~MemoryWriteStream() override {
+        if (!closed_) fs_.dropStaging(path_);  // abandoned: discard, like a deleted .tmp
+    }
 
     Status write(const char* data, std::size_t size) override {
         if (closed_) return makeError(ErrorCode::IoError, "stream already closed");
@@ -48,13 +55,23 @@ class MemoryWriteStream : public IWriteStream {
     Status close() override {
         if (closed_) return makeError(ErrorCode::IoError, "stream already closed");
         closed_ = true;
+        fs_.dropStaging(path_);
         return fs_.commit(path_, std::move(buffer_));
     }
+
+    Status suspend() override {
+        if (closed_) return makeError(ErrorCode::IoError, "stream already closed");
+        closed_ = true;
+        return fs_.keepStaging(path_, std::move(buffer_));
+    }
+
+    std::uint64_t resumedFrom() const override { return resumedFrom_; }
 
   private:
     MemoryFileSystem& fs_;
     std::string path_;
     std::string buffer_;
+    std::uint64_t resumedFrom_ = 0;
     bool closed_ = false;
 };
 
@@ -132,6 +149,7 @@ Result<std::vector<DirEntry>> MemoryFileSystem::listDirectory(std::string_view r
     for (auto it = range.first; it != range.second; ++it) {
         std::string name = it->first.substr(prefix.size());
         if (name.find('/') != std::string::npos) continue;  // grand-child
+        if (isStagingName(name)) continue;                   // suspended downloads stay hidden
         std::uint64_t size = it->second.type == EntryType::File ? it->second.data->size() : 0;
         entries.push_back(DirEntry{std::move(name), it->second.type, size, it->second.modifiedAt});
     }
@@ -170,7 +188,7 @@ Result<std::unique_ptr<IReadStream>> MemoryFileSystem::openRead(std::string_view
     return std::unique_ptr<IReadStream>(std::make_unique<MemoryReadStream>(it->second.data));
 }
 
-Result<std::unique_ptr<IWriteStream>> MemoryFileSystem::openWrite(std::string_view rawPath) {
+Result<std::unique_ptr<IWriteStream>> MemoryFileSystem::openWrite(std::string_view rawPath, WriteOptions options) {
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (Status writable = checkWritable(); !writable) return writable.error();
@@ -181,8 +199,22 @@ Result<std::unique_ptr<IWriteStream>> MemoryFileSystem::openWrite(std::string_vi
     }
     if (Status parent = checkParentDirectory(path.value()); !parent) return parent.error();
 
-    return std::unique_ptr<IWriteStream>(std::make_unique<MemoryWriteStream>(*this, path.value()));
+    std::string resumed;
+    auto staging = nodes_.find(stagingPath(path.value()));
+    if (staging != nodes_.end() && staging->second.type == EntryType::File) {
+        if (options.resume) resumed = *staging->second.data;
+        nodes_.erase(staging);  // owned by the new stream from now on
+    }
+    return std::unique_ptr<IWriteStream>(std::make_unique<MemoryWriteStream>(*this, path.value(), std::move(resumed)));
 }
+
+Status MemoryFileSystem::keepStaging(const std::string& path, std::string data) {
+    if (Status writable = checkWritable(); !writable) return writable;
+    nodes_[stagingPath(path)] = Node{EntryType::File, std::make_shared<const std::string>(std::move(data)), clock_()};
+    return success();
+}
+
+void MemoryFileSystem::dropStaging(const std::string& path) { nodes_.erase(stagingPath(path)); }
 
 Status MemoryFileSystem::commit(const std::string& path, std::string data) {
     if (Status writable = checkWritable(); !writable) return writable;

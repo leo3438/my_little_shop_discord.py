@@ -41,6 +41,12 @@ Result<std::string> AppManager::nroPathFor(const AppEntry& app) const {
 Result<std::string> AppManager::iconPathFor(const AppEntry& app) const {
     auto folder = folderFor(app);
     if (!folder) return folder.error();
+    return folder.value() + "/" + app.folder + ".jpg";
+}
+
+Result<std::string> AppManager::iconAliasPathFor(const AppEntry& app) const {
+    auto folder = folderFor(app);
+    if (!folder) return folder.error();
     return folder.value() + "/icon.jpg";
 }
 
@@ -145,11 +151,13 @@ Status AppManager::installIcon(const AppEntry& app, const CancellationToken& can
         nullptr, cancel);
     if (!downloaded) return downloaded;
     if (Status valid = validateIcon(image); !valid) return valid;
-    return fs_.writeFile(path.value(), image);  // atomic
+    if (Status written = fs_.writeFile(path.value(), image); !written) return written;  // atomic
+    return fs_.writeFile(iconAliasPathFor(app).value(), image);
 }
 
 DownloadJob AppManager::job(const AppEntry& app) {
     DownloadJob job;
+    job.kind = DownloadKind::App;
     job.itemId = app.id;
     job.title = app.title;
     job.url = app.nroUrl;
@@ -172,7 +180,7 @@ DownloadJob AppManager::job(const AppEntry& app) {
         // Unknown size: ask the server, so that the space check still happens.
         if (state->size == 0) state->size = remoteSize(app.nroUrl);
         state->folderExisted = fs_.exists(vpath::parent(destination.value()));
-        auto install = beginFileInstall(fs_, destination.value(), state->size, app.crc32, app.title);
+        auto install = beginFileInstall(fs_, destination.value(), state->size, app.crc32, app.title, /*resume=*/true);
         if (install) install.value()->setHeaderCheck(kNroHeaderBytes, validateNroHeader);
         return install;
     };

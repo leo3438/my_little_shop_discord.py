@@ -68,8 +68,8 @@ class LocalReadStream : public IReadStream {
 
 class LocalWriteStream : public IWriteStream {
   public:
-    LocalWriteStream(std::FILE* file, fs::path staging, fs::path target)
-        : file_(file), staging_(std::move(staging)), target_(std::move(target)) {
+    LocalWriteStream(std::FILE* file, fs::path staging, fs::path target, std::uint64_t resumedFrom)
+        : file_(file), staging_(std::move(staging)), target_(std::move(target)), resumedFrom_(resumedFrom) {
         std::setvbuf(file_, nullptr, _IOFBF, kIoBufferSize);
     }
 
@@ -86,6 +86,17 @@ class LocalWriteStream : public IWriteStream {
         if (std::fwrite(data, 1, size, file_) != size) {
             return makeError(ErrorCode::IoError, "write failed: " + target_.string());
         }
+        return success();
+    }
+
+    std::uint64_t resumedFrom() const override { return resumedFrom_; }
+
+    Status suspend() override {
+        if (file_ == nullptr) return makeError(ErrorCode::IoError, "stream already closed");
+        bool flushed = std::fflush(file_) == 0;
+        bool closed = std::fclose(file_) == 0;
+        file_ = nullptr;  // the staging file stays for a resume
+        if (!flushed || !closed) return makeError(ErrorCode::IoError, "flush failed: " + staging_.string());
         return success();
     }
 
@@ -111,6 +122,7 @@ class LocalWriteStream : public IWriteStream {
     std::FILE* file_;
     fs::path staging_;
     fs::path target_;
+    std::uint64_t resumedFrom_ = 0;
 };
 
 }  // namespace
@@ -225,7 +237,7 @@ Result<std::unique_ptr<IReadStream>> LocalFileSystem::openRead(std::string_view 
     return std::unique_ptr<IReadStream>(std::make_unique<LocalReadStream>(file));
 }
 
-Result<std::unique_ptr<IWriteStream>> LocalFileSystem::openWrite(std::string_view rawPath) {
+Result<std::unique_ptr<IWriteStream>> LocalFileSystem::openWrite(std::string_view rawPath, WriteOptions options) {
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (path.value() == "/") return makeError(ErrorCode::IsADirectory, "/");
@@ -236,9 +248,15 @@ Result<std::unique_ptr<IWriteStream>> LocalFileSystem::openWrite(std::string_vie
     fs::path target = toHost(path.value());
     fs::path staging = toHost(stagingPath(path.value()));
 
-    std::FILE* file = std::fopen(staging.string().c_str(), "wb");
+    std::uint64_t resumedFrom = 0;
+    std::error_code ec;
+    if (options.resume && fs::is_regular_file(staging, ec)) {
+        auto size = fs::file_size(staging, ec);
+        if (!ec) resumedFrom = size;
+    }
+    std::FILE* file = std::fopen(staging.string().c_str(), resumedFrom > 0 ? "ab" : "wb");
     if (file == nullptr) return makeError(ErrorCode::IoError, "cannot create " + path.value());
-    return std::unique_ptr<IWriteStream>(std::make_unique<LocalWriteStream>(file, staging, target));
+    return std::unique_ptr<IWriteStream>(std::make_unique<LocalWriteStream>(file, staging, target, resumedFrom));
 }
 
 Status LocalFileSystem::remove(std::string_view rawPath) {

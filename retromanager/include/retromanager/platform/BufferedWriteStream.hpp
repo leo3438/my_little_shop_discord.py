@@ -17,7 +17,9 @@ class BufferedWriteStream : public IWriteStream {
     explicit BufferedWriteStream(std::unique_ptr<IWriteStream> inner, std::size_t capacity = kDefaultCapacity);
 
     Status write(const char* data, std::size_t size) override;
-    Status close() override;  // flushes, then commits the inner stream
+    Status close() override;    // flushes, then commits the inner stream
+    Status suspend() override;  // flushes, then keeps the inner stream's staging file
+    std::uint64_t resumedFrom() const override { return inner_->resumedFrom(); }
 
     std::size_t capacity() const { return capacity_; }
 
