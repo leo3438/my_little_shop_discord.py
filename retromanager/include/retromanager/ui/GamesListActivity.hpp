@@ -1,7 +1,9 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -11,11 +13,12 @@
 #include "retromanager/models/GameEntry.hpp"
 #include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
+#include "retromanager/ui/ForwarderActivity.hpp"
 
 namespace rm::ui {
 
 // One game row: title + "region · year · size", and an "Installed" or
-// "Queued" tag.
+// "Queued" tag. On an installed game, X creates its HOME shortcut.
 class GameCell : public brls::RecyclerCell {
   public:
     GameCell();
@@ -24,10 +27,14 @@ class GameCell : public brls::RecyclerCell {
     void setState(bool installed, bool queued);
 
     std::string gameId;  // game currently bound to this (recycled) cell
+    std::function<void()> onCreateForwarder;  // null when forwarders are unavailable
 
     BRLS_BIND(brls::Label, title, "game/title");
     BRLS_BIND(brls::Label, detail, "game/detail");
     BRLS_BIND(brls::Label, installedTag, "game/installed");
+
+  private:
+    bool installed_ = false;
 };
 
 // Shop contents, one section per system. Picking a game queues it (the
@@ -35,7 +42,9 @@ class GameCell : public brls::RecyclerCell {
 // services only: it never sees the transport, the parser nor the SD card.
 class GamesListActivity : public brls::Activity {
   public:
-    GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus);
+    // `forwarders` null: no "Create a shortcut" action.
+    GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus,
+                      std::optional<ForwarderTools> forwarders = std::nullopt);
     ~GamesListActivity() override;
 
     CONTENT_FROM_XML_RES("activity/games_list.xml");
@@ -52,6 +61,7 @@ class GamesListActivity : public brls::Activity {
     ShopService& shop_;
     DownloadQueueManager& downloads_;
     EventBus& bus_;
+    std::optional<ForwarderTools> forwarders_;
     // Cleared on destruction: a load finishing after the user left the
     // screen must not touch the destroyed views. Both the destructor and
     // the callback run on the main thread, so a plain flag is enough.

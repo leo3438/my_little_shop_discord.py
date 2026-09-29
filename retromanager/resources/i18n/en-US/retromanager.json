@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch: installed",
         "retroarch_missing": "RetroArch: not found on the SD card",
         "init_failed": "Cannot prepare RetroManager's folders: {}",
-        "version": "v{} - Phase 9 - Web, scraping & sources",
+        "version": "v{} - Phase 10 - HOME shortcuts (forwarders)",
         "shop": "Shop: {}",
         "saves": "Cloud saves: {}",
         "saves_not_configured": "Cloud saves: not configured (saves_url)"
@@ -170,5 +170,26 @@
         "deleted": "Source deleted: {}",
         "activated": "Shop: {}",
         "error": "Cannot do it: {}"
+    },
+    "forwarder": {
+        "title": "HOME shortcut",
+        "action": "Create a shortcut (Forwarder)",
+        "heading": "Creating a shortcut",
+        "working": "Generating the shortcut for \"{}\"...",
+        "working_hint": "Icon, encryption and NSP packaging: a few seconds.",
+        "done": "Shortcut generated in /nsp/. Please install it with DBI or Tinfoil.",
+        "done_details": "File: {}\nCore: {}\nROM: {}\nTitle ID: {}",
+        "placeholder_icon": "No box art on the card: a plain icon was used.",
+        "sigpatches": "Signature patches (sigpatches) are required to install and launch it.",
+        "failed": "Shortcut not created",
+        "cancelled": "Shortcut creation cancelled",
+        "error_keys_missing": "Console keys not found.\nCopy the prod.keys file (dumped on your console with Lockpick_RCM) to this exact location on the SD card:\n{}",
+        "error_keys_invalid": "prod.keys has no \"{}\" key (or it cannot be read).\nDump the keys again with Lockpick_RCM and replace the file:\n{}",
+        "error_stub_missing": "Forwarder template (stub) not found.\nCopy the stub files to this folder of the SD card:\n{}/\nMissing files: {}",
+        "error_stub_invalid": "The stub file is not a valid main.npdm:\n{}",
+        "error_rom_missing": "The ROM is no longer on the SD card:\n{}",
+        "error_core_missing": "No RetroArch core for this system in {}/.\nInstall one of these (RetroArch's Online Updater): {}",
+        "error_write": "Cannot write the file in /nsp/: {}",
+        "error_generic": "Generation failed: {}"
     }
 }

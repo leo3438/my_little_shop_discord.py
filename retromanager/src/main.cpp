@@ -23,6 +23,7 @@
 #include "retromanager/services/QueueStore.hpp"
 #include "retromanager/services/ShopService.hpp"
 #include "retromanager/services/SysClkConfigurator.hpp"
+#include "retromanager/services/ForwarderBuilder.hpp"
 #include "retromanager/services/ThumbnailManager.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/DownloadNotifier.hpp"
@@ -180,6 +181,15 @@ int main(int argc, char* argv[]) {
     rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shops, bus,
                          std::make_unique<rm::WorkerThread>(onMainThread));
 
+    // HOME shortcuts: the builder, then its worker (destroyed first, joining a build in progress).
+    rm::ForwarderBuilder forwarderBuilder(context.fileSystem(), context.layout(),
+                                          [&thumbnails](const rm::GameEntry& game, const std::string& romPath) {
+                                              auto path = thumbnails.destinationFor(game, romPath);
+                                              return path ? std::optional<std::string>(path.value()) : std::nullopt;
+                                          });
+    rm::WorkerThread forwarderWorker(onMainThread);
+    rm::ui::ForwarderTools forwarderTools{forwarderBuilder, forwarderWorker};
+
     rm::ui::DownloadNotifier notifier(bus);  // "installed" / "failed", from any screen
 
     // What was still queued when the app last quit resumes by itself.
@@ -195,7 +205,8 @@ int main(int argc, char* argv[]) {
     openSources = [&] { brls::Application::pushActivity(new rm::ui::SourcesActivity(catalog, *remotes.shops, bus)); };
 #endif
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus, openSources));
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus,
+                                                             openSources, forwarderTools));
 
     if (restored > 0) {
         brls::Logger::info("{} queued downloads restored", restored);

@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 9 - Web, scraping & sources",
+        "version": "v{} - Phase 10 - Raccourcis HOME (forwarders)",
         "shop": "Boutique : {}",
         "saves": "Sauvegardes cloud : {}",
         "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
@@ -170,5 +170,26 @@
         "deleted": "Source supprimée : {}",
         "activated": "Boutique : {}",
         "error": "Impossible : {}"
+    },
+    "forwarder": {
+        "title": "Raccourci HOME",
+        "action": "Créer un raccourci (Forwarder)",
+        "heading": "Création d'un raccourci",
+        "working": "Génération du raccourci pour « {} »...",
+        "working_hint": "Icône, chiffrement et empaquetage du NSP : quelques secondes.",
+        "done": "Raccourci généré dans /nsp/. Veuillez l'installer via DBI ou Tinfoil.",
+        "done_details": "Fichier : {}\nCore : {}\nROM : {}\nTitle ID : {}",
+        "placeholder_icon": "Pas de jaquette sur la carte : une icône unie a été utilisée.",
+        "sigpatches": "Les signature patches (sigpatches) doivent être installés pour l'installer et le lancer.",
+        "failed": "Raccourci non créé",
+        "cancelled": "Création du raccourci annulée",
+        "error_keys_missing": "Clés de la console introuvables.\nCopiez le fichier prod.keys (obtenu sur votre console avec Lockpick_RCM) à cet emplacement exact de la carte SD :\n{}",
+        "error_keys_invalid": "Le fichier prod.keys ne contient pas la clé « {} » (ou elle est illisible).\nRefaites un dump avec Lockpick_RCM et remplacez le fichier :\n{}",
+        "error_stub_missing": "Modèle de forwarder (stub) introuvable.\nCopiez les fichiers du stub dans ce dossier de la carte SD :\n{}/\nFichiers manquants : {}",
+        "error_stub_invalid": "Le fichier du stub n'est pas un main.npdm valide :\n{}",
+        "error_rom_missing": "La ROM n'est plus sur la carte SD :\n{}",
+        "error_core_missing": "Aucun core RetroArch pour ce système dans {}/.\nInstallez l'un de ceux-ci (Mise à jour en ligne de RetroArch) : {}",
+        "error_write": "Impossible d'écrire le fichier dans /nsp/ : {}",
+        "error_generic": "La génération a échoué : {}"
     }
 }

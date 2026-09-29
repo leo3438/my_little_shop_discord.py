@@ -40,8 +40,12 @@ std::string describeForUser(const Error& error) {
 class GamesDataSource : public brls::RecyclerDataSource {
   public:
     GamesDataSource(std::vector<SystemSection> sections, std::shared_ptr<const std::set<std::string>> installed,
-                    DownloadQueueManager& downloads, EventBus& bus)
-        : sections_(std::move(sections)), installed_(std::move(installed)), downloads_(downloads), bus_(bus) {}
+                    DownloadQueueManager& downloads, EventBus& bus, std::optional<ForwarderTools> forwarders)
+        : sections_(std::move(sections)),
+          installed_(std::move(installed)),
+          downloads_(downloads),
+          bus_(bus),
+          forwarders_(forwarders) {}
 
     int numberOfSections(brls::RecyclerFrame*) override { return static_cast<int>(sections_.size()); }
 
@@ -63,6 +67,11 @@ class GamesDataSource : public brls::RecyclerDataSource {
         cell->gameId = game.id;
         cell->title->setText(game.title);
         cell->detail->setText(detailLine(game));
+        cell->onCreateForwarder = nullptr;
+        if (forwarders_) {
+            ForwarderTools tools = *forwarders_;
+            cell->onCreateForwarder = [tools, game] { brls::Application::pushActivity(new ForwarderActivity(tools, game)); };
+        }
         cell->setState(installed_->count(game.id) > 0, downloads_.isQueued(game.id));
         return cell;
     }
@@ -83,22 +92,34 @@ class GamesDataSource : public brls::RecyclerDataSource {
     std::shared_ptr<const std::set<std::string>> installed_;
     DownloadQueueManager& downloads_;
     EventBus& bus_;
+    std::optional<ForwarderTools> forwarders_;
 };
 
 }  // namespace
 
-GameCell::GameCell() { this->inflateFromXMLRes("xml/cells/game_cell.xml"); }
+GameCell::GameCell() {
+    this->inflateFromXMLRes("xml/cells/game_cell.xml");
+    registerAction(brls::getStr("retromanager/forwarder/action"), brls::BUTTON_X, [this](brls::View*) {
+        if (!installed_ || !onCreateForwarder) return false;
+        onCreateForwarder();
+        return true;
+    });
+    setActionAvailable(brls::BUTTON_X, false);
+}
 
 GameCell* GameCell::create() { return new GameCell(); }
 
 void GameCell::setState(bool installed, bool queued) {
+    installed_ = installed && !queued;
+    setActionAvailable(brls::BUTTON_X, installed_ && onCreateForwarder != nullptr);
     if (queued) installedTag->setText(brls::getStr("retromanager/downloads/tag_queued"));
     else if (installed) installedTag->setText(brls::getStr("retromanager/shop/installed"));
     installedTag->setVisibility(queued || installed ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 }
 
-GamesListActivity::GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus)
-    : shop_(shop), downloads_(downloads), bus_(bus) {}
+GamesListActivity::GamesListActivity(ShopService& shop, DownloadQueueManager& downloads, EventBus& bus,
+                                     std::optional<ForwarderTools> forwarders)
+    : shop_(shop), downloads_(downloads), bus_(bus), forwarders_(forwarders) {}
 
 GamesListActivity::~GamesListActivity() { *alive_ = false; }
 
@@ -166,7 +187,7 @@ void GamesListActivity::showListing(const ShopListing& listing) {
 
     statusLabel->setVisibility(brls::Visibility::GONE);
     recycler->setVisibility(brls::Visibility::VISIBLE);
-    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games), installed_, downloads_, bus_));
+    recycler->setDataSource(new GamesDataSource(ShopService::groupBySystem(index.games), installed_, downloads_, bus_, forwarders_));
     brls::Application::giveFocus(recycler);
 }
 

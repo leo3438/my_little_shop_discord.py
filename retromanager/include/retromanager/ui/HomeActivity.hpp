@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 #include <functional>
+#include <optional>
 
 #include "retromanager/core/AppContext.hpp"
 #include "retromanager/core/Result.hpp"
@@ -11,6 +12,7 @@
 #include "retromanager/services/CloudSyncService.hpp"
 #include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/ShopService.hpp"
+#include "retromanager/ui/ForwarderActivity.hpp"
 
 namespace rm::ui {
 
@@ -22,7 +24,8 @@ class HomeActivity : public brls::Activity {
   public:
     HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadQueueManager& downloads,
                  CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus,
-                 std::function<void()> openSources = nullptr);  // null: no Sources screen (built without curl)
+                 std::function<void()> openSources = nullptr,  // null: no Sources screen (built without curl)
+                 std::optional<ForwarderTools> forwarders = std::nullopt);
 
     CONTENT_FROM_XML_RES("activity/home.xml");
 
@@ -41,6 +44,7 @@ class HomeActivity : public brls::Activity {
     EventBus& bus_;
     EventBus::Subscription queueChanged_, sourcesChanged_;
     std::function<void()> openSources_;
+    std::optional<ForwarderTools> forwarders_;
 
     BRLS_BIND(brls::Button, openShopButton, "home/open_shop");
     BRLS_BIND(brls::Button, syncButton, "home/sync_saves");

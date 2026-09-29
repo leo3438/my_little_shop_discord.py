@@ -46,6 +46,13 @@ add_library(retromanager_core STATIC
     src/core/Result.cpp
     src/core/Url.cpp
     src/core/WorkerThread.cpp
+    src/forwarder/Aes128.cpp
+    src/forwarder/IconMaker.cpp
+    src/forwarder/Sha256.cpp
+    src/forwarder/nsp/Containers.cpp
+    src/forwarder/nsp/Metadata.cpp
+    src/forwarder/nsp/Nca.cpp
+    src/forwarder/StbImage.cpp
     src/fs/FileInstall.cpp
     src/fs/RomStore.cpp
     src/models/Bios.cpp
@@ -69,6 +76,7 @@ add_library(retromanager_core STATIC
     src/services/CloudSyncService.cpp
     src/services/ConfigManager.cpp
     src/services/DownloadQueueManager.cpp
+    src/services/ForwarderBuilder.cpp
     src/services/EmulatorConfigurator.cpp
     src/services/PlaylistManager.cpp
     src/services/QueueStore.cpp
@@ -80,7 +88,12 @@ add_library(retromanager_core STATIC
 )
 target_include_directories(retromanager_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 find_package(Threads REQUIRED)
-target_link_libraries(retromanager_core PUBLIC nlohmann_json::nlohmann_json Threads::Threads)
+target_link_libraries(retromanager_core PUBLIC nlohmann_json::nlohmann_json Threads::Threads PRIVATE rm_stb)
+# Third-party code: built as is, without our warning set. stb's JPEG writer
+# left-shifts negative values on purpose (well-defined since C++20, UB for
+# UBSan in C++17): that single check is off for this file, ASan and the
+# other UBSan checks stay on (a no-op without -fsanitize).
+set_source_files_properties(src/forwarder/StbImage.cpp PROPERTIES COMPILE_OPTIONS "-w;-fno-sanitize=shift-base")
 target_compile_definitions(retromanager_core PUBLIC RM_VERSION="${PROJECT_VERSION}")
 target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
 
@@ -126,6 +139,7 @@ if (RM_BUILD_APP)
         src/ui/DownloadNotifier.cpp
         src/ui/DownloadsActivity.cpp
         src/ui/DownloadSummary.cpp
+        src/ui/ForwarderActivity.cpp
         src/ui/GamesListActivity.cpp
         src/ui/HomeActivity.cpp
         src/ui/SyncActivity.cpp

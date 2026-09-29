@@ -34,7 +34,14 @@ jobs:
           echo "RM_TEST_FTP_PORT=$(cat "$RUNNER_TEMP/ftp.port")" >> "$GITHUB_ENV"
           echo "RM_TEST_FTPS_PORT=$(cat "$RUNNER_TEMP/ftps.port")" >> "$GITHUB_ENV"
           echo "RM_TEST_HTTP_PORT=$(cat "$RUNNER_TEMP/http.port")" >> "$GITHUB_ENV"
-      - name: Test (FTP/FTPS/HTTP integration included)
+      - name: Build hactool (independent check of the generated NSPs)
+        run: |
+          git clone https://github.com/SciresM/hactool.git "$RUNNER_TEMP/hactool"
+          git -C "$RUNNER_TEMP/hactool" checkout 1d64a83450e025622f3468c28fc4164dad2c5ef6
+          cp "$RUNNER_TEMP/hactool/config.mk.template" "$RUNNER_TEMP/hactool/config.mk"
+          make -C "$RUNNER_TEMP/hactool" -j"$(nproc)"
+          echo "RM_HACTOOL=$RUNNER_TEMP/hactool/hactool" >> "$GITHUB_ENV"
+      - name: Test (FTP/FTPS/HTTP integration and hactool check included)
         run: ctest --preset tests
 
   tests-bundled-curl:

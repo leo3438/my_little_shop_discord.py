@@ -14,7 +14,7 @@ namespace rm::ui {
 
 HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadQueueManager& downloads,
                            CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus,
-                           std::function<void()> openSources)
+                           std::function<void()> openSources, std::optional<ForwarderTools> forwarders)
     : context_(context),
       initStatus_(std::move(initStatus)),
       shop_(shop),
@@ -23,11 +23,12 @@ HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& 
       bios_(bios),
       apps_(apps),
       bus_(bus),
-      openSources_(std::move(openSources)) {}
+      openSources_(std::move(openSources)),
+      forwarders_(forwarders) {}
 
 void HomeActivity::onContentAvailable() {
     openShopButton->registerClickAction([this](brls::View*) {
-        brls::Application::pushActivity(new GamesListActivity(shop_, downloads_, bus_));
+        brls::Application::pushActivity(new GamesListActivity(shop_, downloads_, bus_, forwarders_));
         return true;
     });
     syncButton->registerClickAction([this](brls::View*) {

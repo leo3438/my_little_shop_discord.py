@@ -36,6 +36,12 @@ struct SdLayout {
     std::string cacheDir = "/switch/RetroManager/cache";
     std::string logsDir = "/switch/RetroManager/logs";
 
+    // Forwarders (Phase 10): console keys dumped by Lockpick_RCM, the
+    // forwarder stub the user provides, and where the generated NSPs go.
+    std::string prodKeys = "/switch/prod.keys";
+    std::string forwarderStubDir = "/switch/RetroManager/stub";
+    std::string nspDir = "/nsp";
+
     // Directories RetroManager owns and creates at startup. RetroArch's own
     // directories are never created by us: their absence means RetroArch is
     // not installed, which the UI must report rather than hide.

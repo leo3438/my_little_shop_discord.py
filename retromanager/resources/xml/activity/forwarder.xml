@@ -1,0 +1,53 @@
+<brls:AppletFrame>
+    <brls:Box
+        id="forwarder/root"
+        title="@i18n/retromanager/forwarder/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        justifyContent="center"
+        grow="1.0">
+
+        <brls:Label
+            text="@i18n/retromanager/forwarder/heading"
+            fontSize="30"
+            horizontalAlign="center"
+            marginBottom="8" />
+
+        <brls:Label
+            id="forwarder/game"
+            fontSize="18"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="40" />
+
+        <!-- Loading screen while the NSP is built. -->
+        <brls:ProgressSpinner
+            id="forwarder/spinner"
+            width="60"
+            height="60"
+            marginBottom="24" />
+
+        <brls:Label
+            id="forwarder/status"
+            width="1000"
+            horizontalAlign="center"
+            marginBottom="16" />
+
+        <brls:Label
+            id="forwarder/details"
+            width="1000"
+            fontSize="18"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginBottom="32" />
+
+        <brls:Button
+            id="forwarder/action"
+            style="bordered"
+            width="300"
+            text="@i18n/retromanager/download/cancel" />
+    </brls:Box>
+</brls:AppletFrame>
