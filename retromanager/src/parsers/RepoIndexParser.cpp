@@ -8,6 +8,7 @@
 
 #include "retromanager/core/Md5.hpp"
 #include "retromanager/core/Url.hpp"
+#include "retromanager/core/FileName.hpp"
 #include "retromanager/models/Bios.hpp"
 #include "retromanager/models/Systems.hpp"
 
@@ -201,6 +202,83 @@ Status readMetadata(const json& root, const char* key, std::string& out) {
     return success();
 }
 
+// "apps" / "emulators": [{"title", "author", "version", "description",
+// "url_nro" (or "url"), "url_icon", "folder", "size", "crc32"}].
+void parseApps(const json& section, const char* sectionName, AppCategory category, const std::string& baseUrl,
+               RepoIndex& index, std::unordered_set<std::string>& seenFolders) {
+    for (std::size_t i = 0; i < section.size(); ++i) {
+        const json& entry = section[i];
+        std::string where = std::string(sectionName) + "[" + std::to_string(i) + "] skipped: ";
+        if (!entry.is_object()) {
+            index.warnings.push_back(where + "entry must be an object");
+            continue;
+        }
+        AppEntry app;
+        app.category = category;
+        std::string problem, rawNro, rawNroAlias, rawIcon, folder, crc;
+        if (!readString(entry, "title", app.title, problem) || !readString(entry, "author", app.author, problem) ||
+            !readString(entry, "version", app.version, problem) ||
+            !readString(entry, "description", app.description, problem) ||
+            !readString(entry, "url_nro", rawNro, problem) || !readString(entry, "url", rawNroAlias, problem) ||
+            !readString(entry, "url_icon", rawIcon, problem) || !readString(entry, "folder", folder, problem) ||
+            !readString(entry, "crc32", crc, problem)) {
+            index.warnings.push_back(where + problem);
+            continue;
+        }
+        app.title = trim(app.title);
+        app.author = trim(app.author);
+        app.version = trim(app.version);
+        if (app.title.empty()) {
+            index.warnings.push_back(where + "missing \"title\"");
+            continue;
+        }
+        if (trim(rawNro).empty()) rawNro = rawNroAlias;
+        if (trim(rawNro).empty()) {
+            index.warnings.push_back(where + "missing \"url_nro\"");
+            continue;
+        }
+        auto nro = url::resolve(baseUrl, trim(rawNro));
+        if (!nro) {
+            index.warnings.push_back(where + "\"url_nro\": " + nro.error().message);
+            continue;
+        }
+        app.nroUrl = nro.value();
+        if (!trim(rawIcon).empty()) {
+            auto icon = url::resolve(baseUrl, trim(rawIcon));
+            if (!icon) {
+                index.warnings.push_back(where + "\"url_icon\": " + icon.error().message);
+                continue;
+            }
+            app.iconUrl = icon.value();
+        }
+        auto safeFolder = sanitizeFileName(trim(folder).empty() ? app.title : trim(folder));
+        if (!safeFolder) {
+            index.warnings.push_back(where + safeFolder.error().message);
+            continue;
+        }
+        app.folder = safeFolder.value();
+        app.id = "app/" + app.folder;
+        crc = toLower(trim(crc));
+        if (!crc.empty() && !isHex8(crc)) {
+            index.warnings.push_back(where + "\"crc32\" must be 8 hexadecimal digits");
+            continue;
+        }
+        app.crc32 = crc;
+        if (auto size = entry.find("size"); size != entry.end() && !size->is_null()) {
+            if (!size->is_number_unsigned()) {
+                index.warnings.push_back(where + "\"size\" must be a non-negative integer");
+                continue;
+            }
+            app.sizeBytes = size->get<std::uint64_t>();
+        }
+        if (!seenFolders.insert(toLower(app.folder)).second) {
+            index.warnings.push_back(where + "duplicate folder \"/switch/" + app.folder + "\"");
+            continue;
+        }
+        index.apps.push_back(std::move(app));
+    }
+}
+
 // "bios": [{"file", "system", "url", "md5", "size"}]. Lenient like games:
 // a bad entry (or a bad section) is a warning, never a reason to refuse the shop.
 void parseBios(const json& root, const std::string& baseUrl, RepoIndex& index) {
@@ -305,8 +383,14 @@ Result<RepoIndex> RepoIndexParser::parse(std::string_view document) const {
 
     auto games = root.find("games");
     auto files = root.find("files");
-    if (games == root.end() && files == root.end()) {
-        return makeError(ErrorCode::ParseError, "index has neither a \"games\" nor a \"files\" array");
+    auto apps = root.find("apps");
+    auto emulators = root.find("emulators");
+    if (games == root.end() && files == root.end() && apps == root.end() && emulators == root.end()) {
+        return makeError(ErrorCode::ParseError, "index has no \"games\", \"files\", \"apps\" or \"emulators\" array");
+    }
+    if (apps != root.end() && !apps->is_array()) return makeError(ErrorCode::ParseError, "\"apps\" must be an array");
+    if (emulators != root.end() && !emulators->is_array()) {
+        return makeError(ErrorCode::ParseError, "\"emulators\" must be an array");
     }
     if (games != root.end() && !games->is_array()) return makeError(ErrorCode::ParseError, "\"games\" must be an array");
     if (files != root.end() && !files->is_array()) return makeError(ErrorCode::ParseError, "\"files\" must be an array");
@@ -315,6 +399,9 @@ Result<RepoIndex> RepoIndexParser::parse(std::string_view document) const {
     if (games != root.end()) entries.parseArray(*games, "games");
     if (files != root.end()) entries.parseArray(*files, "files");
     parseBios(root, baseUrl_, index);
+    std::unordered_set<std::string> appFolders;
+    if (apps != root.end()) parseApps(*apps, "apps", AppCategory::Homebrew, baseUrl_, index, appFolders);
+    if (emulators != root.end()) parseApps(*emulators, "emulators", AppCategory::Emulator, baseUrl_, index, appFolders);
 
     if (root.contains("directories")) {
         index.warnings.push_back("\"directories\" (Tinfoil sub-indexes) is not supported yet and was ignored");

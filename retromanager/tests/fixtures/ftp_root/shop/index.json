@@ -47,5 +47,33 @@
       "file": "gba_bios.bin",
       "url": "bios/gba_bios.bin"
     }
+  ],
+  "apps": [
+    {
+      "title": "RetroArch",
+      "author": "libretro",
+      "version": "1.19.1",
+      "description": "Frontend multi-systèmes (cœurs libretro).",
+      "url_nro": "apps/RetroArch/retroarch_switch.nro",
+      "url_icon": "apps/RetroArch/icon.jpg",
+      "size": 8251
+    },
+    {
+      "title": "pNES",
+      "author": "Cpasjuste",
+      "version": "2.0",
+      "description": "Émulateur NES.",
+      "url_nro": "apps/pNES/pnes.nro",
+      "url_icon": "apps/pNES/icon.jpg"
+    }
+  ],
+  "emulators": [
+    {
+      "title": "melonDS",
+      "author": "Arisotura, RSDuck",
+      "version": "0.9.5",
+      "description": "Émulateur Nintendo DS.",
+      "url_nro": "apps/melonDS/melonDS.nro"
+    }
   ]
 }

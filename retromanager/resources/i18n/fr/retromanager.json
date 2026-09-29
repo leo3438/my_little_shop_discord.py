@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 6 - Playlists, jaquettes & BIOS",
+        "version": "v{} - Phase 7 - Émulateurs & homebrews",
         "shop": "Boutique : {}",
         "saves": "Sauvegardes cloud : {}",
         "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
@@ -61,7 +61,12 @@
         "step_playlist_failed": "Impossible d'ajouter le jeu à la playlist ({}).",
         "step_boxart_ok": "Jaquette téléchargée.",
         "step_boxart_missing": "Jaquette ignorée : RetroArch absent ou image introuvable sur le serveur.",
-        "step_boxart_failed": "Impossible d'installer la jaquette ({})."
+        "step_boxart_failed": "Impossible d'installer la jaquette ({}).",
+        "app_done": "Application installée dans {}",
+        "step_icon_ok": "Icône installée ({}).",
+        "step_icon_missing": "Icône introuvable sur le serveur.",
+        "step_icon_failed": "Impossible d'installer l'icône ({}).",
+        "step_record_failed": "Version installée non mémorisée ({})."
     },
     "sync": {
         "title": "Sauvegardes cloud",
@@ -106,5 +111,14 @@
         "failed": "Échec du téléchargement",
         "failed_integrity": "Fichier du serveur corrompu (MD5)",
         "summary_none": "{} BIOS manquant(s), aucun disponible sur le serveur."
+    },
+    "apps": {
+        "open": "Émulateurs & Homebrews",
+        "title": "Émulateurs & Homebrews",
+        "emulators": "Émulateurs",
+        "homebrews": "Homebrews",
+        "by": "par {}",
+        "update": "MISE À JOUR",
+        "empty": "Cette boutique ne propose aucune application (sections \"apps\" / \"emulators\" de l'index)."
     }
 }

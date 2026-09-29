@@ -1,0 +1,52 @@
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="row"
+    alignItems="center"
+    focusable="true"
+    paddingTop="10"
+    paddingBottom="10"
+    paddingLeft="@style/brls/sidebar/item_accent_margin_sides"
+    paddingRight="@style/brls/sidebar/item_accent_margin_sides">
+
+    <brls:Box
+        width="auto"
+        height="auto"
+        axis="column"
+        grow="1.0">
+
+        <brls:Label
+            id="app/title"
+            width="auto"
+            height="auto"
+            singleLine="true"
+            fontSize="@style/brls/sidebar/item_font_size" />
+
+        <!-- "v1.19.1  ·  libretro  ·  24 MB" -->
+        <brls:Label
+            id="app/detail"
+            width="auto"
+            height="auto"
+            singleLine="true"
+            fontSize="16"
+            textColor="@theme/brls/text_disabled"
+            marginTop="4" />
+
+        <brls:Label
+            id="app/description"
+            width="auto"
+            height="auto"
+            singleLine="true"
+            fontSize="15"
+            textColor="@theme/brls/text_disabled"
+            marginTop="2" />
+    </brls:Box>
+
+    <!-- "INSTALLÉ" or "MISE À JOUR" -->
+    <brls:Label
+        id="app/tag"
+        visibility="gone"
+        fontSize="16"
+        textColor="@theme/brls/accent"
+        marginLeft="20" />
+</brls:Box>

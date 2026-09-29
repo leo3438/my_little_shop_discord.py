@@ -2,18 +2,35 @@
 
 #include <borealis.hpp>
 
+#include <functional>
+
 #include "retromanager/core/EventBus.hpp"
+#include "retromanager/models/AppEntry.hpp"
 #include "retromanager/models/GameEntry.hpp"
+#include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
 
 namespace rm::ui {
 
-// Modal download screen: starts the download, shows its progress from the
-// EventBus, B cancels (the service deletes the staging file), then A/B
-// closes once finished.
+// What the download screen shows, and how it starts the transfer.
+struct DownloadRequest {
+    enum class Kind { Rom, App };
+    Kind kind = Kind::Rom;
+    std::string title;
+    std::uint64_t sizeBytes = 0;
+    std::string system;                 // ROMs: names the playlist in the summary
+    std::function<DownloadId()> start;  // called once, after the screen subscribed to the events
+
+    static DownloadRequest forGame(DownloadService& downloads, const GameEntry& game);
+    static DownloadRequest forApp(DownloadService& downloads, AppManager& apps, const AppEntry& app);
+};
+
+// Modal download screen (a ROM or a homebrew): starts the download, shows
+// its progress from the EventBus, B cancels (the service deletes the
+// staging file), then A/B closes once finished with a summary.
 class DownloadActivity : public brls::Activity {
   public:
-    DownloadActivity(DownloadService& downloads, EventBus& bus, GameEntry game);
+    DownloadActivity(DownloadService& downloads, EventBus& bus, DownloadRequest request);
     ~DownloadActivity() override;
 
     CONTENT_FROM_XML_RES("activity/download.xml");
@@ -33,7 +50,7 @@ class DownloadActivity : public brls::Activity {
 
     DownloadService& downloads_;
     EventBus& bus_;
-    GameEntry game_;
+    DownloadRequest request_;
     DownloadId id_ = 0;
     State state_ = State::Running;
     bool closing_ = false;

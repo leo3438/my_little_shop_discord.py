@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "retromanager/models/AppEntry.hpp"
 #include "retromanager/models/Bios.hpp"
 
 namespace rm {
@@ -42,6 +43,7 @@ struct RepoIndex {
     std::string motd;     // message of the day (Tinfoil's "success" field), may be empty
     std::vector<GameEntry> games;
     std::vector<BiosEntry> bios;  // "bios" section: system files the shop can provide
+    std::vector<AppEntry> apps;   // "apps" / "emulators" sections: homebrews
     // Non-fatal problems: skipped entries, ignored fields. Worth logging,
     // never worth refusing the whole shop over.
     std::vector<std::string> warnings;

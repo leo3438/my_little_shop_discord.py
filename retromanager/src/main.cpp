@@ -11,6 +11,7 @@
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
 #include "retromanager/platform/Platform.hpp"
+#include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/CloudSyncService.hpp"
@@ -143,6 +144,7 @@ int main(int argc, char* argv[]) {
     rm::ThumbnailManager thumbnails(context.fileSystem(), context.layout(), *remotes.shop);
     rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shop);
     rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.sysclk.titleId);
+    rm::AppManager apps(context.fileSystem(), context.layout(), *remotes.shop);
     rm::DownloadService downloads(*remotes.shop, romStore, bus, *platform.system,
                                   std::make_unique<rm::WorkerThread>(onMainThread));
     downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch's browser at it
@@ -155,7 +157,7 @@ int main(int argc, char* argv[]) {
     rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shop, bus,
                          std::make_unique<rm::WorkerThread>(onMainThread));
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, bus));
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus));
 
     while (brls::Application::mainLoop()) {
     }

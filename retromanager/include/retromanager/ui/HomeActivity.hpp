@@ -5,6 +5,7 @@
 #include "retromanager/core/AppContext.hpp"
 #include "retromanager/core/Result.hpp"
 #include "retromanager/core/EventBus.hpp"
+#include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CloudSyncService.hpp"
 #include "retromanager/services/DownloadService.hpp"
@@ -19,7 +20,7 @@ namespace rm::ui {
 class HomeActivity : public brls::Activity {
   public:
     HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadService& downloads,
-                 CloudSyncService& cloudSync, BiosManager& bios, EventBus& bus);
+                 CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus);
 
     CONTENT_FROM_XML_RES("activity/home.xml");
 
@@ -32,11 +33,13 @@ class HomeActivity : public brls::Activity {
     DownloadService& downloads_;
     CloudSyncService& cloudSync_;
     BiosManager& bios_;
+    AppManager& apps_;
     EventBus& bus_;
 
     BRLS_BIND(brls::Button, openShopButton, "home/open_shop");
     BRLS_BIND(brls::Button, syncButton, "home/sync_saves");
     BRLS_BIND(brls::Button, biosButton, "home/bios");
+    BRLS_BIND(brls::Button, appsButton, "home/apps");
     BRLS_BIND(brls::Label, savesLabel, "home/saves");
     BRLS_BIND(brls::Label, platformLabel, "home/platform");
     BRLS_BIND(brls::Label, sdRootLabel, "home/sd_root");

@@ -28,7 +28,7 @@ std::string describeFailure(const DownloadFinished& event) {
 }
 
 // One line per post-install step outcome.
-std::string describeStep(const StepOutcome& step, const std::string& romFolder, const GameEntry& game) {
+std::string describeStep(const StepOutcome& step, const std::string& romFolder, const DownloadRequest& request) {
     const bool ok = step.result.ok();
     const bool missing = !ok && step.result.error().code == ErrorCode::NotFound;
     if (step.id == "retroarch") {
@@ -37,8 +37,8 @@ std::string describeStep(const StepOutcome& step, const std::string& romFolder, 
         return brls::getStr("retromanager/download/step_retroarch_failed", step.result.error().describe());
     }
     if (step.id == "playlist") {
-        const SystemInfo* system = systems::find(game.system);
-        if (ok) return brls::getStr("retromanager/download/step_playlist_ok", system ? system->libretroName : game.system);
+        const SystemInfo* system = systems::find(request.system);
+        if (ok) return brls::getStr("retromanager/download/step_playlist_ok", system ? system->libretroName : request.system);
         if (missing) return brls::getStr("retromanager/download/step_playlist_missing");
         return brls::getStr("retromanager/download/step_playlist_failed", step.result.error().describe());
     }
@@ -47,6 +47,12 @@ std::string describeStep(const StepOutcome& step, const std::string& romFolder, 
         if (missing) return brls::getStr("retromanager/download/step_boxart_missing");
         return brls::getStr("retromanager/download/step_boxart_failed", step.result.error().describe());
     }
+    if (step.id == "icon") {
+        if (ok) return brls::getStr("retromanager/download/step_icon_ok", romFolder + "icon.jpg");
+        if (missing) return brls::getStr("retromanager/download/step_icon_missing");
+        return brls::getStr("retromanager/download/step_icon_failed", step.result.error().describe());
+    }
+    if (step.id == "record") return brls::getStr("retromanager/download/step_record_failed", step.result.error().describe());
     if (step.id == "cheats") {
         if (ok) return brls::getStr("retromanager/download/step_cheats_ok");
         if (missing) return brls::getStr("retromanager/download/step_cheats_missing");
@@ -67,8 +73,27 @@ std::string parentFolder(const std::string& path) {
 
 }  // namespace
 
-DownloadActivity::DownloadActivity(DownloadService& downloads, EventBus& bus, GameEntry game)
-    : downloads_(downloads), bus_(bus), game_(std::move(game)) {}
+DownloadRequest DownloadRequest::forGame(DownloadService& downloads, const GameEntry& game) {
+    DownloadRequest request;
+    request.kind = Kind::Rom;
+    request.title = game.title;
+    request.sizeBytes = game.sizeBytes;
+    request.system = game.system;
+    request.start = [&downloads, game] { return downloads.start(game); };
+    return request;
+}
+
+DownloadRequest DownloadRequest::forApp(DownloadService& downloads, AppManager& apps, const AppEntry& app) {
+    DownloadRequest request;
+    request.kind = Kind::App;
+    request.title = app.version.empty() ? app.title : app.title + " " + app.version;
+    request.sizeBytes = app.sizeBytes;
+    request.start = [&downloads, &apps, app] { return downloads.start(apps.job(app)); };
+    return request;
+}
+
+DownloadActivity::DownloadActivity(DownloadService& downloads, EventBus& bus, DownloadRequest request)
+    : downloads_(downloads), bus_(bus), request_(std::move(request)) {}
 
 DownloadActivity::~DownloadActivity() {
     // Leaving the screen (or quitting the app) never leaves a transfer running.
@@ -76,9 +101,9 @@ DownloadActivity::~DownloadActivity() {
 }
 
 void DownloadActivity::onContentAvailable() {
-    titleLabel->setText(game_.title);
+    titleLabel->setText(request_.title);
     destinationLabel->setText("");
-    statsLabel->setText(game_.sizeBytes > 0 ? formatBytes(game_.sizeBytes) : "");
+    statsLabel->setText(request_.sizeBytes > 0 ? formatBytes(request_.sizeBytes) : "");
     statusLabel->setText(brls::getStr("retromanager/download/waiting"));
     stepsLabel->setText("");
     setProgress(0);
@@ -95,7 +120,7 @@ void DownloadActivity::onContentAvailable() {
     progressed_ = bus_.subscribe<DownloadProgressed>([this](const DownloadProgressed& e) { onProgress(e); });
     configuring_ = bus_.subscribe<DownloadConfiguring>([this](const DownloadConfiguring& e) { onConfiguring(e); });
     finished_ = bus_.subscribe<DownloadFinished>([this](const DownloadFinished& e) { onFinished(e); });
-    id_ = downloads_.start(game_);
+    id_ = request_.start();
 }
 
 void DownloadActivity::onStarted(const DownloadStarted& event) {
@@ -137,25 +162,27 @@ void DownloadActivity::onFinished(const DownloadFinished& event) {
     actionButton->setState(brls::ButtonState::ENABLED);
 
     if (event.result.ok()) {
-        brls::Logger::info("Installed {} -> {}", game_.title, event.destination);
+        brls::Logger::info("Installed {} -> {}", request_.title, event.destination);
         setProgress(1.0);
-        statusLabel->setText(brls::getStr("retromanager/download/done"));
+        statusLabel->setText(request_.kind == DownloadRequest::Kind::App
+                                 ? brls::getStr("retromanager/download/app_done", parentFolder(event.destination))
+                                 : brls::getStr("retromanager/download/done"));
         std::string report;
         for (const StepOutcome& step : event.steps) {
             if (!step.result.ok()) brls::Logger::warning("Post-install {}: {}", step.id, step.result.error().describe());
             if (!report.empty()) report += "\n";
-            report += describeStep(step, parentFolder(event.destination), game_);
+            report += describeStep(step, parentFolder(event.destination), request_);
         }
         stepsLabel->setText(report);
         return;
     }
     if (event.result.error().code == ErrorCode::Cancelled) {
-        brls::Logger::info("Download cancelled: {}", game_.title);
-        brls::Application::notify(brls::getStr("retromanager/download/cancelled", game_.title));
+        brls::Logger::info("Download cancelled: {}", request_.title);
+        brls::Application::notify(brls::getStr("retromanager/download/cancelled", request_.title));
         close();
         return;
     }
-    brls::Logger::error("Download failed: {}: {}", game_.title, event.result.error().describe());
+    brls::Logger::error("Download failed: {}: {}", request_.title, event.result.error().describe());
     statusLabel->setText(describeFailure(event));
     statsLabel->setText(event.result.error().message);
 }

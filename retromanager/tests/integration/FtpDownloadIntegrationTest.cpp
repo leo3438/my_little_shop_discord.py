@@ -20,6 +20,7 @@
 #include "retromanager/platform/LocalFileSystem.hpp"
 #include "retromanager/parsers/CfgDocument.hpp"
 #include "retromanager/parsers/PlaylistDocument.hpp"
+#include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
 #include "retromanager/services/CheatManager.hpp"
 #include "retromanager/services/DownloadService.hpp"
@@ -303,6 +304,47 @@ TEST_F(FtpDownload, BiosFilesOfferedByTheShopAreCheckedAndInstalled) {
     CancellationToken cancel;
     EXPECT_EQ(bios.installNow(wrong, cancel).error().code, ErrorCode::IntegrityError);
     EXPECT_FALSE(fs.exists("/retroarch/system/scph5500.bin"));
+    for (auto& entry : std::filesystem::recursive_directory_iterator(sd.path())) {
+        EXPECT_FALSE(isStagingName(entry.path().filename().string())) << entry.path();
+    }
+}
+
+TEST_F(FtpDownload, HomebrewStoreInstallsNrosAndIcons) {
+    LocalFileSystem fs(sd.path());
+    ASSERT_TRUE(test::copyHostTree(test::fixtureSdCardDir(), fs).ok());
+    ImmediateTaskRunner tasks;
+    auto index = ShopService(*client, tasks).loadIndex();
+    ASSERT_TRUE(index.ok()) << index.error().describe();
+    ASSERT_EQ(index.value().apps.size(), 3u);
+
+    EventBus bus(tasks);
+    RomStore store(fs, SdLayout{});
+    NullSystem system;
+    DownloadService downloads(*client, store, bus, system, std::make_unique<ImmediateTaskRunner>());
+    AppManager apps(fs, SdLayout{}, *client);
+    std::vector<DownloadFinished> finished;
+    auto sub = bus.subscribe<DownloadFinished>([&](const DownloadFinished& e) { finished.push_back(e); });
+
+    for (const AppEntry& app : index.value().apps) {
+        EXPECT_EQ(apps.state(app), AppState::NotInstalled) << app.title;
+        downloads.start(apps.job(app));
+    }
+
+    ASSERT_EQ(finished.size(), 3u);
+    for (const DownloadFinished& e : finished) {
+        ASSERT_TRUE(e.result.ok()) << e.itemId << ": " << e.result.error().describe();
+        for (const StepOutcome& step : e.steps) EXPECT_TRUE(step.result.ok()) << e.itemId << " " << step.id;
+    }
+    EXPECT_TRUE(AppManager::validateNroHeader(fs.readFile("/switch/RetroArch/RetroArch.nro").value()).ok());
+    EXPECT_TRUE(AppManager::validateIcon(fs.readFile("/switch/RetroArch/icon.jpg").value()).ok());
+    EXPECT_TRUE(fs.isFile("/switch/melonDS/melonDS.nro"));  // "emulators" section, size asked to the server
+    EXPECT_FALSE(fs.exists("/switch/melonDS/icon.jpg"));
+    EXPECT_TRUE(fs.isFile("/switch/pNES/icon.jpg"));
+    for (const AppEntry& app : index.value().apps) EXPECT_EQ(apps.state(app), AppState::Installed) << app.title;
+
+    AppEntry newer = index.value().apps[0];
+    newer.version = "1.20.0";
+    EXPECT_EQ(apps.state(newer), AppState::UpdateAvailable);
     for (auto& entry : std::filesystem::recursive_directory_iterator(sd.path())) {
         EXPECT_FALSE(isStagingName(entry.path().filename().string())) << entry.path();
     }

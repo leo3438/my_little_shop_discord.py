@@ -70,7 +70,7 @@ class GamesDataSource : public brls::RecyclerDataSource {
     void didSelectRowAt(brls::RecyclerFrame*, brls::IndexPath index) override {
         const GameEntry& game = at(index);
         brls::Logger::info("Game selected: {} [{}] {}", game.title, game.id, game.romUrl);
-        brls::Application::pushActivity(new DownloadActivity(downloads_, bus_, game));
+        brls::Application::pushActivity(new DownloadActivity(downloads_, bus_, DownloadRequest::forGame(downloads_, game)));
     }
 
   private:
@@ -129,10 +129,10 @@ void GamesListActivity::load() {
 }
 
 void GamesListActivity::onDownloadFinished(const DownloadFinished& event) {
-    if (!event.result.ok() || event.gameId.empty()) return;
-    installed_->insert(event.gameId);
+    if (!event.result.ok() || event.itemId.empty()) return;
+    installed_->insert(event.itemId);
     for (GameCell* cell : cells_) {
-        if (cell->gameId == event.gameId) cell->setInstalled(true);
+        if (cell->gameId == event.itemId) cell->setInstalled(true);
     }
 }
 

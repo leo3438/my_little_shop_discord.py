@@ -40,11 +40,13 @@ add_library(retromanager_core STATIC
     src/core/AppContext.cpp
     src/core/Crc32.cpp
     src/core/EventBus.cpp
+    src/core/FileName.cpp
     src/core/Format.cpp
     src/core/Md5.cpp
     src/core/Result.cpp
     src/core/Url.cpp
     src/core/WorkerThread.cpp
+    src/fs/FileInstall.cpp
     src/fs/RomStore.cpp
     src/models/Bios.cpp
     src/models/Systems.cpp
@@ -59,6 +61,7 @@ add_library(retromanager_core STATIC
     src/platform/common/ISystem.cpp
     src/platform/common/LocalFileSystem.cpp
     src/platform/common/VirtualPath.cpp
+    src/services/AppManager.cpp
     src/services/BiosManager.cpp
     src/services/CheatManager.cpp
     src/services/CloudSyncService.cpp
@@ -110,6 +113,7 @@ if (RM_BUILD_APP)
 
     set(RM_APP_SRC
         src/main.cpp
+        src/ui/AppsListActivity.cpp
         src/ui/BiosActivity.cpp
         src/ui/DownloadActivity.cpp
         src/ui/GamesListActivity.cpp

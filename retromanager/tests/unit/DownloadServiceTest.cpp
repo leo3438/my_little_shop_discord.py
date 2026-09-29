@@ -399,7 +399,7 @@ TEST(DownloadService, RunsPostInstallStepsAfterTheRomIsCommitted) {
     EXPECT_EQ(cheats.ranFor.size(), 1u);
     ASSERT_EQ(f.finished.size(), 1u);
     EXPECT_TRUE(f.finished[0].result.ok());
-    EXPECT_EQ(f.finished[0].gameId, "nds/Game.nds");
+    EXPECT_EQ(f.finished[0].itemId, "nds/Game.nds");
     ASSERT_EQ(f.finished[0].steps.size(), 1u);  // the nullopt step is not reported
     EXPECT_EQ(f.finished[0].steps[0].id, "retroarch");
     EXPECT_TRUE(f.finished[0].steps[0].result.ok());

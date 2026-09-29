@@ -20,26 +20,33 @@
             horizontalAlign="center"
             marginBottom="28" />
 
-        <brls:Button
-            id="home/open_shop"
-            style="primary"
-            width="400"
-            text="@i18n/retromanager/shop/open"
-            marginBottom="16" />
-
-        <brls:Button
-            id="home/sync_saves"
-            style="bordered"
-            width="400"
-            text="@i18n/retromanager/sync/open"
-            marginBottom="16" />
-
-        <brls:Button
-            id="home/bios"
-            style="bordered"
-            width="400"
-            text="@i18n/retromanager/bios/open"
-            marginBottom="32" />
+        <!-- 2 x 2 grid: shop and app store, then saves and BIOS. -->
+        <brls:Box axis="row" marginBottom="16">
+            <brls:Button
+                id="home/open_shop"
+                style="primary"
+                width="380"
+                text="@i18n/retromanager/shop/open"
+                marginRight="16" />
+            <brls:Button
+                id="home/apps"
+                style="primary"
+                width="380"
+                text="@i18n/retromanager/apps/open" />
+        </brls:Box>
+        <brls:Box axis="row" marginBottom="32">
+            <brls:Button
+                id="home/sync_saves"
+                style="bordered"
+                width="380"
+                text="@i18n/retromanager/sync/open"
+                marginRight="16" />
+            <brls:Button
+                id="home/bios"
+                style="bordered"
+                width="380"
+                text="@i18n/retromanager/bios/open" />
+        </brls:Box>
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -13,6 +14,7 @@
 #include "retromanager/core/Cancellation.hpp"
 #include "retromanager/core/EventBus.hpp"
 #include "retromanager/core/ITaskRunner.hpp"
+#include "retromanager/fs/FileInstall.hpp"
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/models/GameEntry.hpp"
 #include "retromanager/network/IRemoteSource.hpp"
@@ -23,10 +25,31 @@ namespace rm {
 
 using DownloadId = std::uint64_t;
 
+// One file to download and install: a ROM (start(GameEntry)), a homebrew
+// (AppManager::job())... The service runs every job the same way: space
+// check and staging before contacting the server, streamed transfer,
+// commit, then the job's own follow-up work.
+struct DownloadJob {
+    std::string itemId;         // reported back in DownloadFinished (GameEntry::id, AppEntry::id)
+    std::string title;
+    std::string url;
+    std::uint64_t sizeBytes = 0;  // 0 = unknown
+    std::string destination;      // virtual path shown to the user, empty if it could not be computed
+    // Space check and staged output (on the worker thread). Required.
+    std::function<Result<std::unique_ptr<FileInstall>>()> begin;
+    // Numbers for an InsufficientSpace failure. Optional.
+    std::function<SpaceReport()> spaceReport;
+    // After the commit, with the CRC-32 actually measured. Optional.
+    std::function<std::vector<StepOutcome>(const std::string& crc32, const CancellationToken&)> afterInstall;
+    // When the install fails or is cancelled (whatever the stage), after the
+    // staging file is gone: lets the job tidy up what it created. Optional.
+    std::function<void()> onFailed;
+};
+
 // Events published on the EventBus (delivered on the main thread).
 struct DownloadStarted {
     DownloadId id;
-    GameEntry game;
+    std::string itemId;
     std::string destination;  // virtual path, empty if it could not be computed
 };
 
@@ -48,12 +71,13 @@ struct DownloadFinished {
     Status result;  // the ROM itself: ok, or Cancelled / InsufficientSpace / NetworkError / IntegrityError...
     std::string destination;
     SpaceReport space;  // meaningful when result is InsufficientSpace
-    std::string gameId;
-    std::vector<StepOutcome> steps;  // post-install outcomes, only after a successful install
+    std::string itemId;
+    std::vector<StepOutcome> steps;  // follow-up outcomes, only after a successful install
 };
 
-// Downloads ROMs from the shop to the SD card, one at a time, off the UI
-// thread. Progress and completion are reported through the EventBus.
+// Downloads files from the shop to the SD card (ROMs, homebrews), one at a
+// time, off the UI thread. Progress and completion are reported through the
+// EventBus.
 //
 // The console is kept awake from the start of a job to its end (transfer
 // and post-install steps), whatever the outcome.
@@ -78,6 +102,10 @@ class DownloadService {
 
     // Queues a download; returns immediately. DownloadStarted is published
     // when the transfer actually begins.
+    DownloadId start(DownloadJob job);
+
+    // A ROM: /roms/<system>/<file> through the RomStore, then the
+    // post-install steps.
     DownloadId start(const GameEntry& game);
 
     // The staging file is removed and DownloadFinished{Cancelled} published.
@@ -88,8 +116,8 @@ class DownloadService {
     std::size_t activeCount() const;
 
   private:
-    void run(DownloadId id, const GameEntry& game, const std::shared_ptr<CancellationToken>& token);
-    void finish(DownloadId id, const GameEntry& game, Status result, std::string destination, SpaceReport space = {},
+    void run(DownloadId id, const DownloadJob& job, const std::shared_ptr<CancellationToken>& token);
+    void finish(DownloadId id, const DownloadJob& job, Status result, SpaceReport space = {},
                 std::vector<StepOutcome> steps = {});
 
     IRemoteSource& source_;
