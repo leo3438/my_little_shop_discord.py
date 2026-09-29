@@ -1,0 +1,37 @@
+<brls:AppletFrame>
+    <brls:Box
+        id="sources/root"
+        title="@i18n/retromanager/sources/title"
+        icon="@res/img/icon.jpg"
+        width="auto"
+        height="auto"
+        axis="column"
+        grow="1.0">
+
+        <brls:Label
+            id="sources/hint"
+            focusable="true"
+            hideHighlight="true"
+            hideClickAnimation="true"
+            fontSize="16"
+            textColor="@theme/brls/text_disabled"
+            horizontalAlign="center"
+            marginTop="16"
+            marginBottom="8" />
+
+        <brls:ScrollingFrame
+            id="sources/scroll"
+            width="auto"
+            height="auto"
+            grow="1.0">
+            <brls:Box
+                id="sources/list"
+                width="auto"
+                height="auto"
+                axis="column"
+                paddingRight="@style/brls/sidebar/padding_right"
+                paddingLeft="@style/brls/sidebar/padding_left"
+                paddingBottom="@style/brls/sidebar/padding_bottom" />
+        </brls:ScrollingFrame>
+    </brls:Box>
+</brls:AppletFrame>

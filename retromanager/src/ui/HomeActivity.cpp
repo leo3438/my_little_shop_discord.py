@@ -1,5 +1,7 @@
 #include "retromanager/ui/HomeActivity.hpp"
 
+#include "retromanager/network/SourceCatalog.hpp"
+
 #include <utility>
 
 #include "retromanager/ui/AppsListActivity.hpp"
@@ -11,7 +13,8 @@
 namespace rm::ui {
 
 HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadQueueManager& downloads,
-                           CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus)
+                           CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus,
+                           std::function<void()> openSources)
     : context_(context),
       initStatus_(std::move(initStatus)),
       shop_(shop),
@@ -19,7 +22,8 @@ HomeActivity::HomeActivity(AppContext& context, Status initStatus, ShopService& 
       cloudSync_(cloudSync),
       bios_(bios),
       apps_(apps),
-      bus_(bus) {}
+      bus_(bus),
+      openSources_(std::move(openSources)) {}
 
 void HomeActivity::onContentAvailable() {
     openShopButton->registerClickAction([this](brls::View*) {
@@ -33,6 +37,17 @@ void HomeActivity::onContentAvailable() {
     appsButton->registerClickAction([this](brls::View*) {
         brls::Application::pushActivity(new AppsListActivity(shop_, apps_, downloads_, bus_));
         return true;
+    });
+    if (openSources_) {
+        sourcesButton->registerClickAction([this](brls::View*) {
+            openSources_();
+            return true;
+        });
+    } else {
+        sourcesButton->setVisibility(brls::Visibility::GONE);
+    }
+    sourcesChanged_ = bus_.subscribe<SourcesChanged>([this](const SourcesChanged&) {
+        shopLabel->setText(brls::getStr("retromanager/home/shop", shop_.sourceDescription()));
     });
     downloadsButton->registerClickAction([this](brls::View*) {
         brls::Application::pushActivity(new DownloadsActivity(downloads_, bus_));

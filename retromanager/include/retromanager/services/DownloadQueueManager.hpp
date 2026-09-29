@@ -47,6 +47,9 @@ struct DownloadJob {
     std::function<SpaceReport()> spaceReport;
     // After the commit, with the CRC-32 actually measured. Optional.
     std::function<std::vector<StepOutcome>(const std::string& crc32, const CancellationToken&)> afterInstall;
+    // How to rebuild this job at the next launch (EntryJson queuePayload).
+    // Empty = not persisted.
+    std::string payload;
     // When the install fails or is cancelled (whatever the stage), after the
     // staging file is gone: lets the job tidy up what it created. Optional.
     std::function<void()> onFailed;
@@ -162,6 +165,12 @@ class DownloadQueueManager {
     bool cancel(DownloadId id);
     void cancelAll();
 
+    // Called with the payloads of the items still to do (running first) after
+    // every change of the queue, from the thread that changed it; never
+    // while the app quits, so that queue.json keeps what was left. Set it
+    // before queuing anything.
+    void setPersistence(std::function<void(const std::vector<std::string>&)> save) { persist_ = std::move(save); }
+
     std::vector<QueueItem> snapshot() const;
     std::vector<DownloadOutcome> history() const;  // newest first
     std::size_t activeCount() const;               // pending + running
@@ -177,7 +186,7 @@ class DownloadQueueManager {
     void drain();
     void run(Entry& entry);
     void finish(Entry& entry, Status result, SpaceReport space = {}, std::vector<StepOutcome> steps = {});
-    void publishChanged();
+    void publishChanged();  // and persists
     std::vector<QueueItem> snapshotLocked() const;
 
     IRemoteSource& source_;
@@ -194,6 +203,11 @@ class DownloadQueueManager {
     bool draining_ = false;  // a drain() task is posted or running
     std::deque<DownloadOutcome> history_;
     std::atomic<DownloadId> nextId_{1};
+
+    std::function<void(const std::vector<std::string>&)> persist_;
+    std::mutex persistMutex_;       // one save at a time...
+    std::uint64_t changeSeq_ = 0;   // (under mutex_) ...and never an older state over a newer one
+    std::uint64_t savedSeq_ = 0;    // (under persistMutex_)
 };
 
 }  // namespace rm

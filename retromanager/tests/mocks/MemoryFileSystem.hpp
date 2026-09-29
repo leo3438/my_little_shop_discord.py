@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -13,7 +14,8 @@
 namespace rm::test {
 
 // Fully in-memory IFileSystem: fast, hermetic, no host disk access.
-// Passes the same contract suite as LocalFileSystem.
+// Passes the same contract suite as LocalFileSystem. Thread-safe like a
+// real card (the UI thread writes queue.json while the worker writes a ROM).
 class MemoryFileSystem : public IFileSystem {
   public:
     MemoryFileSystem();
@@ -44,7 +46,10 @@ class MemoryFileSystem : public IFileSystem {
     Status setModificationTime(std::string_view path, std::int64_t modifiedAt);
 
     // Number of files and directories, root excluded.
-    std::size_t nodeCount() const { return nodes_.size() - 1; }
+    std::size_t nodeCount() const {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        return nodes_.size() - 1;
+    }
 
   private:
     struct Node {
@@ -66,6 +71,7 @@ class MemoryFileSystem : public IFileSystem {
     Range descendants(const std::string& path);
     bool hasChildren(const std::string& path);
 
+    mutable std::recursive_mutex mutex_;  // streams call back into commit()/keepStaging()
     NodeMap nodes_;  // key: normalized virtual path
     bool readOnly_ = false;
     std::function<std::int64_t()> clock_ = [] { return static_cast<std::int64_t>(std::time(nullptr)); };

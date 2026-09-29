@@ -6,6 +6,7 @@
 #include "retromanager/core/FileName.hpp"
 #include "retromanager/core/Url.hpp"
 #include "retromanager/fs/FileInstall.hpp"
+#include "retromanager/parsers/EntryJson.hpp"
 #include "retromanager/platform/VirtualPath.hpp"
 
 namespace rm {
@@ -158,6 +159,7 @@ Status AppManager::installIcon(const AppEntry& app, const CancellationToken& can
 DownloadJob AppManager::job(const AppEntry& app) {
     DownloadJob job;
     job.kind = DownloadKind::App;
+    job.payload = queuePayload(app);
     job.itemId = app.id;
     job.title = app.title;
     job.url = app.nroUrl;

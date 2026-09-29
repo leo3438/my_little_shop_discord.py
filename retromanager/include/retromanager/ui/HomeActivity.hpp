@@ -1,6 +1,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 
 #include "retromanager/core/AppContext.hpp"
 #include "retromanager/core/Result.hpp"
@@ -20,7 +21,8 @@ namespace rm::ui {
 class HomeActivity : public brls::Activity {
   public:
     HomeActivity(AppContext& context, Status initStatus, ShopService& shop, DownloadQueueManager& downloads,
-                 CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus);
+                 CloudSyncService& cloudSync, BiosManager& bios, AppManager& apps, EventBus& bus,
+                 std::function<void()> openSources = nullptr);  // null: no Sources screen (built without curl)
 
     CONTENT_FROM_XML_RES("activity/home.xml");
 
@@ -37,13 +39,15 @@ class HomeActivity : public brls::Activity {
     BiosManager& bios_;
     AppManager& apps_;
     EventBus& bus_;
-    EventBus::Subscription queueChanged_;
+    EventBus::Subscription queueChanged_, sourcesChanged_;
+    std::function<void()> openSources_;
 
     BRLS_BIND(brls::Button, openShopButton, "home/open_shop");
     BRLS_BIND(brls::Button, syncButton, "home/sync_saves");
     BRLS_BIND(brls::Button, biosButton, "home/bios");
     BRLS_BIND(brls::Button, appsButton, "home/apps");
     BRLS_BIND(brls::Button, downloadsButton, "home/downloads");
+    BRLS_BIND(brls::Button, sourcesButton, "home/sources");
     BRLS_BIND(brls::Label, savesLabel, "home/saves");
     BRLS_BIND(brls::Label, platformLabel, "home/platform");
     BRLS_BIND(brls::Label, sdRootLabel, "home/sd_root");

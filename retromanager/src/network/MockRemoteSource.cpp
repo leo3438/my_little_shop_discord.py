@@ -229,6 +229,7 @@ Status MockRemoteSource::downloadFileFrom(const std::string& url, std::uint64_t 
                                           const ProgressCallback& progress, const CancellationToken& cancel) {
     ++downloadCount_;
     lastOffset_ = offset;
+    if (offset > maxOffset_) maxOffset_ = offset;
     if (latency_.count() > 0) std::this_thread::sleep_for(latency_);
     if (failure_) return *failure_;
 

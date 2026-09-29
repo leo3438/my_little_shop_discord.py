@@ -113,3 +113,89 @@ TEST(ThumbnailManager, ReportsNetworkErrorsAndMissingRetroArch) {
     EXPECT_EQ(empty.nodeCount(), 0u);
     EXPECT_EQ(shop.downloadCount(), 0);  // checked before contacting the NAS
 }
+
+// --- libretro scraper (fallback) -------------------------------------------
+
+namespace {
+
+const std::string kScraper = "https://thumbnails.libretro.com/";
+const std::string kScraped =
+    "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/Pokemon%20Platine%20(France).png";
+
+struct ScraperFixture {
+    std::unique_ptr<test::MemoryFileSystem> sd = test::makeMockSdCard();
+    MockRemoteSource web{"{}", ""};
+    ThumbnailManager thumbnails{*sd, SdLayout{}, web, kScraper};
+    CancellationToken cancel;
+};
+
+}  // namespace
+
+TEST(ThumbnailScraper, ForgesTheLibretroUrl) {
+    ScraperFixture f;
+    EXPECT_EQ(f.thumbnails.scraperUrlFor(platine(), kRomPath).value(),
+              "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/Pokemon%20Platine%20%28France%29.png");
+    GameEntry tricky = platine();
+    EXPECT_EQ(f.thumbnails.scraperUrlFor(tricky, "/roms/nds/Tom & Jerry: Frenzy #1.nds").value(),
+              "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/Tom%20_%20Jerry_%20Frenzy%20%231.png");
+    ThumbnailManager noSlash(*f.sd, SdLayout{}, f.web, "https://mirror.example/thumbs");
+    EXPECT_EQ(noSlash.scraperUrlFor(platine(), kRomPath).value().rfind("https://mirror.example/thumbs/Nintendo", 0), 0u);
+    GameEntry arcade = platine();
+    arcade.system = "arcade";
+    EXPECT_FALSE(f.thumbnails.scraperUrlFor(arcade, "/roms/arcade/sf2.zip").ok());
+}
+
+TEST(ThumbnailScraper, UsedWhenTheIndexHasNoBoxart) {
+    ScraperFixture f;
+    f.web.addFile(kScraped, kPng);
+    GameEntry game = platine();
+    game.boxartUrl.clear();
+
+    auto result = f.thumbnails.run(game, kRomPath, f.cancel);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result->ok()) << result->error().describe();
+    EXPECT_EQ(f.sd->readFile(kThumbnail).value(), kPng);
+}
+
+TEST(ThumbnailScraper, UsedWhenTheIndexBoxartFails) {
+    ScraperFixture f;
+    f.web.addFile(kScraped, kPng);  // the shop's own boxart URL is missing on the server
+    auto result = f.thumbnails.run(platine(), kRomPath, f.cancel);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(result->ok());
+    EXPECT_TRUE(f.sd->isFile(kThumbnail));
+}
+
+TEST(ThumbnailScraper, A404IsIgnoredDiscreetly) {
+    ScraperFixture f;
+    GameEntry game = platine();
+    game.boxartUrl.clear();
+    EXPECT_FALSE(f.thumbnails.run(game, kRomPath, f.cancel).has_value());  // nothing to report
+    EXPECT_EQ(f.web.downloadCount(), 1);
+    EXPECT_FALSE(f.sd->exists(kThumbnail));
+
+    // With a boxart in the index, its own error is what the user sees.
+    auto failed = f.thumbnails.run(platine(), kRomPath, f.cancel);
+    ASSERT_TRUE(failed.has_value());
+    EXPECT_EQ(failed->error().code, ErrorCode::NotFound);
+}
+
+TEST(ThumbnailScraper, TheIndexBoxartWins) {
+    ScraperFixture f;
+    f.web.addFile(kBoxartUrl, kPng);
+    f.web.addFile(kScraped, std::string("\x89PNG\r\n\x1a\n", 8) + "other");
+    ASSERT_TRUE(f.thumbnails.run(platine(), kRomPath, f.cancel)->ok());
+    EXPECT_EQ(f.sd->readFile(kThumbnail).value(), kPng);
+    EXPECT_EQ(f.web.downloadCount(), 1);  // the scraper was not needed
+}
+
+TEST(ThumbnailScraper, SilentWithoutRetroArch) {
+    test::MemoryFileSystem empty;
+    MockRemoteSource web("{}", "");
+    ThumbnailManager thumbnails(empty, SdLayout{}, web, kScraper);
+    GameEntry game = platine();
+    game.boxartUrl.clear();
+    CancellationToken cancel;
+    EXPECT_FALSE(thumbnails.run(game, kRomPath, cancel).has_value());
+    EXPECT_EQ(web.downloadCount(), 0);
+}

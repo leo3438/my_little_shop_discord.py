@@ -47,12 +47,19 @@
                 width="380"
                 text="@i18n/retromanager/bios/open" />
         </brls:Box>
-        <brls:Button
-            id="home/downloads"
-            style="bordered"
-            width="776"
-            text="@i18n/retromanager/downloads/title"
-            marginBottom="24" />
+        <brls:Box axis="row" marginBottom="24">
+            <brls:Button
+                id="home/downloads"
+                style="bordered"
+                width="380"
+                text="@i18n/retromanager/downloads/title"
+                marginRight="16" />
+            <brls:Button
+                id="home/sources"
+                style="bordered"
+                width="380"
+                text="@i18n/retromanager/sources/title" />
+        </brls:Box>
 
         <brls:Label id="home/platform" horizontalAlign="center" marginBottom="10" />
         <brls:Label id="home/sd_root" horizontalAlign="center" marginBottom="10" />

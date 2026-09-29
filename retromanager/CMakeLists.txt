@@ -51,8 +51,10 @@ add_library(retromanager_core STATIC
     src/models/Bios.cpp
     src/models/Systems.cpp
     src/network/MockRemoteSource.cpp
+    src/network/SourceRouter.cpp
     src/parsers/CfgDocument.cpp
     src/parsers/ConfigParser.cpp
+    src/parsers/EntryJson.cpp
     src/parsers/IniDocument.cpp
     src/parsers/PlaylistDocument.cpp
     src/parsers/RepoIndexParser.cpp
@@ -69,6 +71,7 @@ add_library(retromanager_core STATIC
     src/services/DownloadQueueManager.cpp
     src/services/EmulatorConfigurator.cpp
     src/services/PlaylistManager.cpp
+    src/services/QueueStore.cpp
     src/services/RetroArchPaths.cpp
     src/services/SysClkConfigurator.cpp
     src/services/ThumbnailManager.cpp
@@ -87,7 +90,12 @@ target_compile_options(retromanager_core PRIVATE ${RM_WARNINGS})
 # ---------------------------------------------------------------------------
 if (RM_WITH_CURL)
     include(Curl)
-    add_library(retromanager_curl STATIC src/network/FtpClient.cpp src/network/SourceFactory.cpp)
+    add_library(retromanager_curl STATIC
+        src/network/CurlCommon.cpp
+        src/network/FtpClient.cpp
+        src/network/HttpClient.cpp
+        src/network/SourceCatalog.cpp
+        src/network/SourceFactory.cpp)
     target_link_libraries(retromanager_curl PUBLIC retromanager_core PRIVATE CURL::libcurl)
     target_compile_options(retromanager_curl PRIVATE ${RM_WARNINGS})
 endif ()
@@ -127,6 +135,9 @@ if (RM_BUILD_APP)
         list(APPEND RM_APP_SRC ${BOREALIS_LIBRARY}/lib/platforms/switch/switch_wrapper.c)
     endif ()
 
+    if (RM_WITH_CURL)
+        list(APPEND RM_APP_SRC src/ui/SourcesActivity.cpp)  # edits sources through the curl clients
+    endif ()
     program_target(${PROJECT_NAME} "${RM_APP_SRC}")
     target_compile_options(${PROJECT_NAME} PRIVATE -ffunction-sections -fdata-sections ${APP_PLATFORM_OPTION})
     target_link_libraries(${PROJECT_NAME} PRIVATE retromanager_core borealis ${APP_PLATFORM_LIB})

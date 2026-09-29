@@ -5,7 +5,9 @@
 #include "retromanager/core/Result.hpp"
 #include "retromanager/models/AppConfig.hpp"
 #include "retromanager/network/FtpClient.hpp"
+#include "retromanager/network/HttpClient.hpp"
 #include "retromanager/network/IRemoteSource.hpp"
+#include "retromanager/network/SourceRouter.hpp"
 
 namespace rm {
 
@@ -17,7 +19,16 @@ Result<FtpConfig> ftpConfigFromShop(const ShopConfig& shop);
 // missing or invalid setting yields an UnavailableRemoteSource whose calls
 // all fail with NotConfigured (the detailed reason in the message), so the
 // UI shows it where the shop would be.
-std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop);
+std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop, const std::string& caBundle = "");
+
+// ShopConfig -> HttpConfig: http(s) URL (a trailing '/' means
+// "<url>index.json"), credentials from the fields or the URL, TLS
+// verification as configured.
+Result<HttpConfig> httpConfigFromShop(const ShopConfig& shop, const std::string& caBundle = "");
+
+// Every configured source behind one router (active = config.activeSource),
+// plus the anonymous public web client (box art scraper).
+std::unique_ptr<SourceRouter> createSourceRouter(const AppConfig& config);
 
 // Where the cloud saves go.
 struct SavesSource {
@@ -26,8 +37,8 @@ struct SavesSource {
 };
 
 // From config.json's saves_url. Credentials: those in the URL
-// ("ftp://user:pass@host/"), else the shop's when saves_url is on the same
-// host and port as the shop, else anonymous: the NAS password is never sent
+// ("ftp://user:pass@host/"), else those of an FTP source on the same host
+// and port, else anonymous: the NAS password is never sent
 // to another server. With the demo shop ("type": "mock") and no saves_url,
 // an in-memory demo NAS is used.
 SavesSource createSavesSource(const AppConfig& config);

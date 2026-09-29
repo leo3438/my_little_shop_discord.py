@@ -10,6 +10,7 @@
 #include "retromanager/core/WorkerThread.hpp"
 #include "retromanager/fs/RomStore.hpp"
 #include "retromanager/network/MockRemoteSource.hpp"
+#include "retromanager/network/SourceRouter.hpp"
 #include "retromanager/platform/Platform.hpp"
 #include "retromanager/services/AppManager.hpp"
 #include "retromanager/services/BiosManager.hpp"
@@ -19,12 +20,18 @@
 #include "retromanager/services/DownloadQueueManager.hpp"
 #include "retromanager/services/EmulatorConfigurator.hpp"
 #include "retromanager/services/PlaylistManager.hpp"
+#include "retromanager/services/QueueStore.hpp"
 #include "retromanager/services/ShopService.hpp"
 #include "retromanager/services/SysClkConfigurator.hpp"
 #include "retromanager/services/ThumbnailManager.hpp"
 #include "retromanager/ui/BorealisTaskRunner.hpp"
 #include "retromanager/ui/DownloadNotifier.hpp"
 #include "retromanager/ui/HomeActivity.hpp"
+
+#ifdef RM_WITH_CURL
+#include "retromanager/network/SourceCatalog.hpp"
+#include "retromanager/ui/SourcesActivity.hpp"
+#endif
 
 #ifdef RM_WITH_CURL
 #include "retromanager/network/SourceFactory.hpp"
@@ -60,10 +67,11 @@ void configureMockFromEnvironment(rm::MockRemoteSource& source) {
 // Everything built from config.json. Problems never prevent the app from
 // starting: they surface in the shop / sync screens instead.
 struct RemoteSources {
-    std::unique_ptr<rm::IRemoteSource> shop;
+    std::unique_ptr<rm::SourceRouter> shops;  // every source; the shop screen shows the active one
     std::unique_ptr<rm::IRemoteSource> saves;
     std::string savesBaseUrl;  // empty = cloud saves not configured
-    rm::SysClkSettings sysclk;
+    rm::AppConfig config;
+    bool configLoaded = false;  // false: config.json is invalid, never rewrite it
 };
 
 RemoteSources createRemoteSources(rm::AppContext& context) {
@@ -73,32 +81,43 @@ RemoteSources createRemoteSources(rm::AppContext& context) {
     if (!config) {
         brls::Logger::error("Configuration: {}", config.error().describe());
         rm::Error error = rm::makeError(rm::ErrorCode::NotConfigured, config.error().message);
-        sources.shop = std::make_unique<rm::UnavailableRemoteSource>(error, configManager.path());
+        sources.shops = std::make_unique<rm::SourceRouter>();
+        sources.shops->add("config.json", "ftp", std::make_shared<rm::UnavailableRemoteSource>(error, configManager.path()));
         sources.saves = std::make_unique<rm::UnavailableRemoteSource>(error, configManager.path());
         return sources;
     }
+    sources.config = config.value();
+    sources.configLoaded = true;
 
 #ifdef RM_WITH_CURL
-    sources.shop = rm::createRemoteSource(config.value().shop);
-    rm::SavesSource saves = rm::createSavesSource(config.value());
+    sources.shops = rm::createSourceRouter(sources.config);
+    rm::SavesSource saves = rm::createSavesSource(sources.config);
     sources.saves = std::move(saves.source);
     sources.savesBaseUrl = std::move(saves.baseUrl);
 #else
     rm::Error noCurl = rm::makeError(rm::ErrorCode::Unsupported, "built without libcurl (RM_WITH_CURL=OFF)");
-    if (config.value().shop.type == "mock") {
-        sources.shop = rm::MockRemoteSource::createDemo();
+    sources.shops = std::make_unique<rm::SourceRouter>();
+    for (const rm::ShopConfig& shop : sources.config.sources) {
+        std::shared_ptr<rm::IRemoteSource> source;
+        if (shop.type == "mock") source = rm::MockRemoteSource::createDemo();
+        else source = std::make_shared<rm::UnavailableRemoteSource>(noCurl, shop.url);
+        sources.shops->add(shop.name, shop.type, source);
+    }
+    sources.shops->setActive(sources.config.activeSource);
+    if (sources.config.activeShop().type == "mock") {
         auto demoNas = std::make_unique<rm::MockRemoteSource>("{}", "");
         demoNas->addDirectory("ftp://mock.local/Saves/");
         sources.saves = std::move(demoNas);
         sources.savesBaseUrl = "ftp://mock.local/Saves/";
     } else {
-        sources.shop = std::make_unique<rm::UnavailableRemoteSource>(noCurl, "ftp");
         sources.saves = std::make_unique<rm::UnavailableRemoteSource>(noCurl, "ftp");
     }
 #endif
-    sources.sysclk = config.value().sysclk;
-    if (auto* mock = dynamic_cast<rm::MockRemoteSource*>(sources.shop.get())) configureMockFromEnvironment(*mock);
-    brls::Logger::info("Shop source: {}", sources.shop->describe());
+    auto demo = sources.shops->route(rm::MockRemoteSource::kDemoIndexUrl);
+    if (auto* mock = dynamic_cast<rm::MockRemoteSource*>(demo.get())) configureMockFromEnvironment(*mock);
+    for (const rm::SourceInfo& info : sources.shops->sources()) {
+        brls::Logger::info("Source{} {}: {}", info.active ? " (active)" : "", info.name, info.description);
+    }
     brls::Logger::info("Cloud saves: {}", sources.savesBaseUrl.empty() ? "(not configured)" : sources.savesBaseUrl);
     return sources;
 }
@@ -139,28 +158,49 @@ int main(int argc, char* argv[]) {
     rm::EventBus bus(uiTasks);
     auto onMainThread = [](std::function<void()> task) { brls::sync(task); };
     rm::RomStore romStore(context.fileSystem(), context.layout());
-    rm::ShopService shop(*remotes.shop, uiTasks, &romStore);
+    rm::ShopService shop(*remotes.shops, uiTasks, &romStore);
     rm::EmulatorConfigurator emulatorConfigurator(context.fileSystem(), context.layout());
     rm::PlaylistManager playlists(context.fileSystem(), context.layout());
-    rm::ThumbnailManager thumbnails(context.fileSystem(), context.layout(), *remotes.shop);
-    rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shop);
-    rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.sysclk.titleId);
-    rm::AppManager apps(context.fileSystem(), context.layout(), *remotes.shop);
-    rm::DownloadQueueManager downloads(*remotes.shop, romStore, bus, *platform.system,
+    rm::ThumbnailManager thumbnails(context.fileSystem(), context.layout(), *remotes.shops,  // box art, else libretro's
+                                    remotes.config.scraper.enabled ? remotes.config.scraper.baseUrl : "");
+    rm::CheatManager cheatManager(context.fileSystem(), context.layout(), *remotes.shops);
+    rm::SysClkConfigurator sysClk(context.fileSystem(), context.layout(), remotes.config.sysclk.titleId);
+    rm::AppManager apps(context.fileSystem(), context.layout(), *remotes.shops);
+    // queue.json: declared before the queue, which saves into it until the end.
+    rm::QueueStore queueStore(context.fileSystem(), context.layout().appDataDir + "/queue.json");
+    rm::DownloadQueueManager downloads(*remotes.shops, romStore, bus, *platform.system,
                                   std::make_unique<rm::WorkerThread>(onMainThread));
     downloads.addPostInstallStep(emulatorConfigurator);  // after the ROM: point RetroArch's browser at it
     downloads.addPostInstallStep(playlists);             // list it in its system's playlist
     downloads.addPostInstallStep(thumbnails);            // with its box art, when the shop has one
     downloads.addPostInstallStep(cheatManager);          // then its cheats, when the shop has some
-    if (remotes.sysclk.enabled) downloads.addPostInstallStep(sysClk);  // N64/PS1/3DS: full CPU speed
+    if (remotes.config.sysclk.enabled) downloads.addPostInstallStep(sysClk);  // N64/PS1/3DS: full CPU speed
     rm::CloudSyncService cloudSync(context.fileSystem(), context.layout(), *remotes.saves, remotes.savesBaseUrl, bus,
                                    *platform.system, std::make_unique<rm::WorkerThread>(onMainThread));
-    rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shop, bus,
+    rm::BiosManager bios(context.fileSystem(), context.layout(), *remotes.shops, bus,
                          std::make_unique<rm::WorkerThread>(onMainThread));
 
     rm::ui::DownloadNotifier notifier(bus);  // "installed" / "failed", from any screen
 
-    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus));
+    // What was still queued when the app last quit resumes by itself.
+    downloads.setPersistence([&queueStore](const std::vector<std::string>& payloads) {
+        if (rm::Status saved = queueStore.save(payloads); !saved) brls::Logger::error("queue.json: {}", saved.error().describe());
+    });
+    std::size_t restored = rm::restoreQueue(queueStore.load(), downloads, apps);
+
+    std::function<void()> openSources;
+#ifdef RM_WITH_CURL
+    rm::ConfigManager configManager(context.fileSystem(), context.layout().appConfig);
+    rm::SourceCatalog catalog(remotes.config, *remotes.shops, configManager, remotes.configLoaded);
+    openSources = [&] { brls::Application::pushActivity(new rm::ui::SourcesActivity(catalog, *remotes.shops, bus)); };
+#endif
+
+    brls::Application::pushActivity(new rm::ui::HomeActivity(context, initStatus, shop, downloads, cloudSync, bios, apps, bus, openSources));
+
+    if (restored > 0) {
+        brls::Logger::info("{} queued downloads restored", restored);
+        brls::Application::notify(brls::getStr("retromanager/downloads/restored", std::to_string(restored)));
+    }
 
     while (brls::Application::mainLoop()) {
     }

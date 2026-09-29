@@ -78,6 +78,7 @@ class MemoryWriteStream : public IWriteStream {
 MemoryFileSystem::MemoryFileSystem() { nodes_.emplace("/", Node{EntryType::Directory, nullptr, clock_()}); }
 
 Status MemoryFileSystem::setModificationTime(std::string_view rawPath, std::int64_t modifiedAt) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     auto it = nodes_.find(path.value());
@@ -126,6 +127,7 @@ bool MemoryFileSystem::hasChildren(const std::string& path) {
 }
 
 Result<FileInfo> MemoryFileSystem::stat(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
 
@@ -136,6 +138,7 @@ Result<FileInfo> MemoryFileSystem::stat(std::string_view rawPath) {
 }
 
 Result<std::vector<DirEntry>> MemoryFileSystem::listDirectory(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
 
@@ -159,6 +162,7 @@ Result<std::vector<DirEntry>> MemoryFileSystem::listDirectory(std::string_view r
 }
 
 Status MemoryFileSystem::createDirectories(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
 
@@ -179,6 +183,7 @@ Status MemoryFileSystem::createDirectories(std::string_view rawPath) {
 }
 
 Result<std::unique_ptr<IReadStream>> MemoryFileSystem::openRead(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
 
@@ -189,6 +194,7 @@ Result<std::unique_ptr<IReadStream>> MemoryFileSystem::openRead(std::string_view
 }
 
 Result<std::unique_ptr<IWriteStream>> MemoryFileSystem::openWrite(std::string_view rawPath, WriteOptions options) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (Status writable = checkWritable(); !writable) return writable.error();
@@ -209,14 +215,19 @@ Result<std::unique_ptr<IWriteStream>> MemoryFileSystem::openWrite(std::string_vi
 }
 
 Status MemoryFileSystem::keepStaging(const std::string& path, std::string data) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (Status writable = checkWritable(); !writable) return writable;
     nodes_[stagingPath(path)] = Node{EntryType::File, std::make_shared<const std::string>(std::move(data)), clock_()};
     return success();
 }
 
-void MemoryFileSystem::dropStaging(const std::string& path) { nodes_.erase(stagingPath(path)); }
+void MemoryFileSystem::dropStaging(const std::string& path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    nodes_.erase(stagingPath(path));
+}
 
 Status MemoryFileSystem::commit(const std::string& path, std::string data) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (Status writable = checkWritable(); !writable) return writable;
     if (Status parent = checkParentDirectory(path); !parent) return parent;
 
@@ -229,6 +240,7 @@ Status MemoryFileSystem::commit(const std::string& path, std::string data) {
 }
 
 Status MemoryFileSystem::remove(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (path.value() == "/") return makeError(ErrorCode::InvalidPath, "cannot remove the root");
@@ -244,6 +256,7 @@ Status MemoryFileSystem::remove(std::string_view rawPath) {
 }
 
 Status MemoryFileSystem::removeAll(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (path.value() == "/") return makeError(ErrorCode::InvalidPath, "cannot remove the root");
@@ -259,6 +272,7 @@ Status MemoryFileSystem::removeAll(std::string_view rawPath) {
 }
 
 Status MemoryFileSystem::rename(std::string_view rawFrom, std::string_view rawTo) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto from = vpath::normalize(rawFrom);
     if (!from) return from.error();
     auto to = vpath::normalize(rawTo);
@@ -296,6 +310,7 @@ Status MemoryFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 }
 
 std::uint64_t MemoryFileSystem::usedBytes() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::uint64_t used = 0;
     for (const auto& entry : nodes_) {
         if (entry.second.type == EntryType::File) used += entry.second.data->size();
@@ -304,6 +319,7 @@ std::uint64_t MemoryFileSystem::usedBytes() const {
 }
 
 Result<std::uint64_t> MemoryFileSystem::availableSpace(std::string_view rawPath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto path = vpath::normalize(rawPath);
     if (!path) return path.error();
     if (nodes_.find(path.value()) == nodes_.end()) return makeError(ErrorCode::NotFound, path.value());

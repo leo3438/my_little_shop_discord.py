@@ -24,15 +24,17 @@ jobs:
         run: cmake --preset tests -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
       - name: Build
         run: cmake --build --preset tests -j
-      - name: Start the test FTP and FTPS servers
+      - name: Start the test FTP, FTPS and HTTP servers
         run: |
           python3 tools/test_ftp_server.py --port-file "$RUNNER_TEMP/ftp.port" \
-            --ftps-port-file "$RUNNER_TEMP/ftps.port" > "$RUNNER_TEMP/ftp.log" 2>&1 &
+            --ftps-port-file "$RUNNER_TEMP/ftps.port" --http-port-file "$RUNNER_TEMP/http.port" \
+            > "$RUNNER_TEMP/ftp.log" 2>&1 &
           for i in $(seq 1 120); do [ -s "$RUNNER_TEMP/ftp.port" ] && break; sleep 0.25; done
           test -s "$RUNNER_TEMP/ftp.port" || { cat "$RUNNER_TEMP/ftp.log"; exit 1; }
           echo "RM_TEST_FTP_PORT=$(cat "$RUNNER_TEMP/ftp.port")" >> "$GITHUB_ENV"
           echo "RM_TEST_FTPS_PORT=$(cat "$RUNNER_TEMP/ftps.port")" >> "$GITHUB_ENV"
-      - name: Test (FTP/FTPS integration included)
+          echo "RM_TEST_HTTP_PORT=$(cat "$RUNNER_TEMP/http.port")" >> "$GITHUB_ENV"
+      - name: Test (FTP/FTPS/HTTP integration included)
         run: ctest --preset tests
 
   tests-bundled-curl:

@@ -14,8 +14,9 @@ file(GLOB_RECURSE RM_TEST_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/*.cpp
 )
-if (NOT RM_WITH_CURL)
-    list(FILTER RM_TEST_SOURCES EXCLUDE REGEX "FtpClient.*Test\\.cpp$")
+if (NOT RM_WITH_CURL)  # everything that needs the libcurl clients
+    list(FILTER RM_TEST_SOURCES EXCLUDE REGEX
+         "/(Ftp[A-Za-z]*|Http[A-Za-z]*|CloudSyncIntegration|SourceFactory|SourceCatalog)Test\\.cpp$")
 endif ()
 add_executable(retromanager_tests ${RM_TEST_SOURCES})
 target_link_libraries(retromanager_tests PRIVATE retromanager_mocks GTest::gtest_main GTest::gmock)

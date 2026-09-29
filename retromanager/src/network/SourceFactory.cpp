@@ -37,8 +37,40 @@ Result<FtpConfig> ftpConfigFromShop(const ShopConfig& shop) {
     return ftp;
 }
 
-std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop) {
+Result<HttpConfig> httpConfigFromShop(const ShopConfig& shop, const std::string& caBundle) {
+    if (shop.url.empty()) return makeError(ErrorCode::NotConfigured, "no shop URL in config.json");
+    auto parts = url::split(shop.url);
+    if (!parts) return parts.error();
+    if (parts.value().scheme != "http" && parts.value().scheme != "https") {
+        return makeError(ErrorCode::Unsupported, "a web shop needs an http:// or https:// URL");
+    }
+    HttpConfig http;
+    // Credentials never stay in the URL (they would be logged and displayed).
+    const url::UrlParts& p = parts.value();
+    std::string host = p.host.find(':') != std::string::npos ? "[" + p.host + "]" : p.host;
+    http.indexUrl = p.scheme + "://" + host + (p.port ? ":" + std::to_string(*p.port) : "") + p.path +
+                    (p.path.back() == '/' ? "index.json" : "") + (p.query.empty() ? "" : "?" + p.query);
+    std::size_t colon = p.userInfo.find(':');
+    std::string urlUser = url::percentDecode(p.userInfo.substr(0, colon));
+    std::string urlPassword = colon == std::string::npos ? "" : url::percentDecode(p.userInfo.substr(colon + 1));
+    http.username = !shop.username.empty() ? shop.username : urlUser;
+    http.password = !shop.password.empty() ? shop.password : urlPassword;
+    http.verifyPeer = shop.verifyTls;
+    http.caBundlePath = caBundle;
+    if (Status valid = HttpClient::validate(http); !valid) return valid.error();
+    return http;
+}
+
+std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop, const std::string& caBundle) {
     if (shop.type == "mock") return MockRemoteSource::createDemo();
+    if (shop.type == "http") {
+        auto http = httpConfigFromShop(shop, caBundle);
+        if (!http) {
+            return std::make_unique<UnavailableRemoteSource>(makeError(ErrorCode::NotConfigured, http.error().describe()),
+                                                             shop.url.empty() ? "(not configured)" : shop.url);
+        }
+        return std::make_unique<HttpClient>(std::move(http.value()));
+    }
 
     auto ftp = ftpConfigFromShop(shop);
     if (!ftp) {
@@ -50,9 +82,21 @@ std::unique_ptr<IRemoteSource> createRemoteSource(const ShopConfig& shop) {
     return std::make_unique<FtpClient>(std::move(ftp.value()));
 }
 
+std::unique_ptr<SourceRouter> createSourceRouter(const AppConfig& config) {
+    HttpConfig publicWeb;  // anonymous, verified: box art from thumbnails.libretro.com...
+    publicWeb.indexUrl = config.scraper.baseUrl.empty() ? "https://thumbnails.libretro.com/" : config.scraper.baseUrl;
+    publicWeb.caBundlePath = config.caBundle;
+    auto router = std::make_unique<SourceRouter>(std::make_shared<HttpClient>(publicWeb));
+    for (const ShopConfig& shop : config.sources) {
+        router->add(shop.name, shop.type, std::shared_ptr<IRemoteSource>(createRemoteSource(shop, config.caBundle)));
+    }
+    if (!config.activeSource.empty()) router->setActive(config.activeSource);
+    return router;
+}
+
 SavesSource createSavesSource(const AppConfig& config) {
     if (config.savesUrl.empty()) {
-        if (config.shop.type == "mock") {
+        if (config.activeShop().type == "mock") {
             auto demo = std::make_unique<MockRemoteSource>("{}", "");
             demo->addDirectory("ftp://mock.local/Saves/");
             return SavesSource{std::move(demo), "ftp://mock.local/Saves/"};
@@ -77,16 +121,24 @@ SavesSource createSavesSource(const AppConfig& config) {
     ftp.host = parts.value().host;
     ftp.port = parts.value().port.value_or(21);
     ftp.useTls = parts.value().scheme == "ftps";
-    ftp.verifyPeer = config.shop.verifyTls;
+    ftp.verifyPeer = config.activeShop().verifyTls;
 
     const std::string& userInfo = parts.value().userInfo;
     if (!userInfo.empty()) {
         std::size_t colon = userInfo.find(':');
         ftp.username = url::percentDecode(userInfo.substr(0, colon));
         ftp.password = colon == std::string::npos ? "" : url::percentDecode(userInfo.substr(colon + 1));
-    } else if (auto shop = ftpConfigFromShop(config.shop); shop && shop.value().host == ftp.host && shop.value().port == ftp.port) {
-        ftp.username = shop.value().username;
-        ftp.password = shop.value().password;
+    } else {
+        // The credentials of a shop on the same NAS (host and port), if any.
+        for (const ShopConfig& shop : config.sources) {
+            auto own = shop.type == "ftp" ? ftpConfigFromShop(shop) : Result<FtpConfig>(makeError(ErrorCode::Unsupported, ""));
+            if (own && own.value().host == ftp.host && own.value().port == ftp.port) {
+                ftp.username = own.value().username;
+                ftp.password = own.value().password;
+                ftp.verifyPeer = shop.verifyTls;
+                break;
+            }
+        }
     }  // else: anonymous
 
     if (Status valid = FtpClient::validate(ftp); !valid) return unusable(valid.error());

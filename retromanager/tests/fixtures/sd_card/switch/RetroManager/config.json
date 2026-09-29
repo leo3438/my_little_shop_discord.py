@@ -1,11 +1,27 @@
 {
   "version": 1,
-  "shop": {
-    "type": "ftp",
-    "url": "ftp://127.0.0.1:2121/shop/index.json",
-    "username": "retro",
-    "password": "manager",
-    "verifyTls": false
-  },
-  "saves_url": "ftp://127.0.0.1:2121/saves/"
+  "sources": [
+    {
+      "name": "NAS",
+      "type": "ftp",
+      "url": "ftp://127.0.0.1:2121/shop/index.json",
+      "username": "retro",
+      "password": "manager",
+      "verifyTls": false
+    },
+    {
+      "name": "Boutique web",
+      "type": "http",
+      "url": "http://127.0.0.1:8121/shop/index.json",
+      "username": "",
+      "password": "",
+      "verifyTls": true
+    }
+  ],
+  "active_source": "NAS",
+  "saves_url": "ftp://127.0.0.1:2121/saves/",
+  "scraper": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:8121/thumbnails/"
+  }
 }

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "retromanager/parsers/EntryJson.hpp"
+
 namespace rm {
 
 DownloadQueueManager::DownloadQueueManager(IRemoteSource& source, RomStore& store, EventBus& bus, ISystem& system,
@@ -121,11 +123,33 @@ bool DownloadQueueManager::isQueued(const std::string& itemId) const {
     return std::any_of(pending_.begin(), pending_.end(), [&](const auto& e) { return e->item.itemId == itemId; });
 }
 
-void DownloadQueueManager::publishChanged() { bus_.publish(DownloadQueueChanged{snapshot()}); }
+void DownloadQueueManager::publishChanged() {
+    std::vector<QueueItem> items;
+    std::vector<std::string> payloads;
+    std::uint64_t seq = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        items = snapshotLocked();
+        if (running_ && !running_->job.payload.empty()) payloads.push_back(running_->job.payload);
+        for (const auto& entry : pending_) {
+            if (!entry->job.payload.empty()) payloads.push_back(entry->job.payload);
+        }
+        seq = ++changeSeq_;
+    }
+    if (persist_ && !shuttingDown_) {
+        std::lock_guard<std::mutex> lock(persistMutex_);
+        if (seq > savedSeq_) {
+            savedSeq_ = seq;
+            persist_(payloads);
+        }
+    }
+    bus_.publish(DownloadQueueChanged{std::move(items)});
+}
 
 DownloadId DownloadQueueManager::start(const GameEntry& game) {
     DownloadJob job;
     job.kind = DownloadKind::Rom;
+    job.payload = queuePayload(game);
     job.system = game.system;
     job.itemId = game.id;
     job.title = game.title;

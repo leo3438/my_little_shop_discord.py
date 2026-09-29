@@ -1,28 +1,41 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace rm {
 
-// Where the shop lives. Stored in /switch/RetroManager/config.json.
+// One shop (a "source"). Stored in /switch/RetroManager/config.json.
 struct ShopConfig {
-    // "ftp": a real server (FtpClient). "mock": the built-in demo shop.
+    std::string name = "NAS";  // unique (ignoring case), shown in the Sources screen
+    // "ftp": a NAS (FtpClient). "http": a web shop (HttpClient).
+    // "mock": the built-in demo shop.
     std::string type = "ftp";
-    // Index location, e.g. "ftp://nas.local:21/shop/index.json".
-    // "ftps://" = explicit FTPS (AUTH TLS). A URL ending with '/' means
-    // "<url>index.json". Empty = not configured yet.
+    // Index location, e.g. "ftp://nas.local:21/shop/index.json" or
+    // "https://example.org/retro/shop.json". "ftps://" = explicit FTPS
+    // (AUTH TLS). A URL ending with '/' means "<url>index.json". Empty = not
+    // configured yet.
     std::string url;
     std::string username;
     std::string password;  // stored in clear text on the SD card (see docs/CONFIG.md)
-    // Off by default: home NAS use self-signed certificates the console
-    // cannot validate (and the Switch has no CA bundle for libcurl). TLS
-    // still encrypts; turn this on for a server with a recognized certificate.
+    // FTP: off by default, home NAS use self-signed certificates the
+    // console cannot validate (TLS still encrypts). HTTP: on by default, web
+    // sites have public certificates (see AppConfig::caBundle).
     bool verifyTls = false;
 
     bool operator==(const ShopConfig& o) const {
-        return type == o.type && url == o.url && username == o.username && password == o.password &&
+        return name == o.name && type == o.type && url == o.url && username == o.username && password == o.password &&
                verifyTls == o.verifyTls;
     }
+};
+
+// Box art fallback when the index has none (or it cannot be fetched):
+// <baseUrl><libretro system>/Named_Boxarts/<ROM name>.png.
+struct ScraperSettings {
+    bool enabled = true;
+    std::string baseUrl = "https://thumbnails.libretro.com/";
+
+    bool operator==(const ScraperSettings& o) const { return enabled == o.enabled && baseUrl == o.baseUrl; }
 };
 
 // sys-clk overclocking profile written after installing N64/PS1/3DS games.
@@ -36,13 +49,32 @@ struct SysClkSettings {
 
 struct AppConfig {
     static constexpr int kVersion = 1;
-    ShopConfig shop;
+    // The shops, in the user's order. The default is one empty "NAS" entry
+    // to fill in.
+    std::vector<ShopConfig> sources = {ShopConfig{}};
+    std::string activeSource = "NAS";  // name of the source the shop screen shows
+    // PEM file for HTTPS verification (host path, "sdmc:/..." on Switch);
+    // empty = libcurl's default.
+    std::string caBundle;
+    ScraperSettings scraper;
     // Folder receiving the save files, e.g. "ftp://nas.local/Saves/". Empty =
     // cloud saves disabled. Uses the shop credentials when on the same server.
     std::string savesUrl;
     SysClkSettings sysclk;
 
-    bool operator==(const AppConfig& o) const { return shop == o.shop && savesUrl == o.savesUrl && sysclk == o.sysclk; }
+    // nullptr when there is no source at all.
+    const ShopConfig* active() const {
+        for (const ShopConfig& source : sources) {
+            if (source.name == activeSource) return &source;
+        }
+        return sources.empty() ? nullptr : &sources.front();
+    }
+    ShopConfig activeShop() const { return active() != nullptr ? *active() : ShopConfig{}; }
+
+    bool operator==(const AppConfig& o) const {
+        return sources == o.sources && activeSource == o.activeSource && caBundle == o.caBundle &&
+               scraper == o.scraper && savesUrl == o.savesUrl && sysclk == o.sysclk;
+    }
 };
 
 }  // namespace rm

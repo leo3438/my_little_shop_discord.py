@@ -7,19 +7,13 @@
 #include <memory>
 #include <mutex>
 
+#include "CurlCommon.hpp"
 #include "retromanager/core/Url.hpp"
 #include "retromanager/platform/VirtualPath.hpp"
 
 namespace rm {
 
 namespace {
-
-void ensureCurlInitialized() {
-    // curl_global_init is not thread-safe: run it exactly once. It is never
-    // paired with curl_global_cleanup: the process exit reclaims everything.
-    static std::once_flag once;
-    std::call_once(once, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
-}
 
 struct Sink {
     std::string data;
@@ -113,16 +107,7 @@ std::int64_t daysFromCivil(std::int64_t y, unsigned m, unsigned d) {
 }
 
 Error fromCurl(CURLcode code, const char* details, const std::string& where) {
-    std::string message = where + ": " + (details[0] != '\0' ? details : curl_easy_strerror(code));
-    switch (code) {
-        case CURLE_LOGIN_DENIED: return makeError(ErrorCode::AuthenticationFailed, message);
-        case CURLE_REMOTE_ACCESS_DENIED: return makeError(ErrorCode::PermissionDenied, message);
-        case CURLE_REMOTE_FILE_NOT_FOUND: return makeError(ErrorCode::NotFound, message);
-        case CURLE_ABORTED_BY_CALLBACK: return makeError(ErrorCode::Cancelled, where + ": cancelled");
-        case CURLE_UNSUPPORTED_PROTOCOL:
-        case CURLE_NOT_BUILT_IN: return makeError(ErrorCode::Unsupported, message);
-        default: return makeError(ErrorCode::NetworkError, message);
-    }
+    return curl::fromCode(code, details, where);
 }
 
 // Options shared by every transfer.
@@ -190,7 +175,7 @@ Result<std::string> FtpClient::fetchFile(std::string_view path, std::size_t maxB
     auto target = buildUrl(config_, path);
     if (!target) return target.error();
 
-    ensureCurlInitialized();
+    curl::ensureInitialized();
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
 
@@ -243,7 +228,7 @@ Status FtpClient::downloadFileFrom(const std::string& target, std::uint64_t offs
     if (!curlUrl) return curlUrl.error();
     if (cancel.isCancelled()) return makeError(ErrorCode::Cancelled, "download cancelled");
 
-    ensureCurlInitialized();
+    curl::ensureInitialized();
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
 
@@ -350,7 +335,7 @@ std::vector<RemoteEntry> FtpClient::parseMlsd(std::string_view listing) {
 Result<std::vector<RemoteEntry>> FtpClient::listWithMlsd(const std::string& directory) const {
     auto target = buildUrl(config_, directory);
     if (!target) return target.error();
-    ensureCurlInitialized();
+    curl::ensureInitialized();
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
 
@@ -374,7 +359,7 @@ Result<std::vector<RemoteEntry>> FtpClient::listWithMlsd(const std::string& dire
 Result<std::vector<RemoteEntry>> FtpClient::listWithNlst(const std::string& directory) const {
     auto target = buildUrl(config_, directory);
     if (!target) return target.error();
-    ensureCurlInitialized();
+    curl::ensureInitialized();
 
     std::string names;
     {
@@ -463,7 +448,7 @@ Status FtpClient::uploadFile(const std::string& target, const ChunkReader& reade
     auto stagingUrl = buildUrl(config_, (directory == "/" ? "/" : directory + "/") + staging);
     if (!stagingUrl) return stagingUrl.error();
 
-    ensureCurlInitialized();
+    curl::ensureInitialized();
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
     if (!curl) return makeError(ErrorCode::NetworkError, "curl_easy_init failed");
 

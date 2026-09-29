@@ -77,6 +77,7 @@ class MockRemoteSource : public IRemoteSource {
     void setResumeSupported(bool supported) { resumeSupported_ = supported; }
     // Offset asked by the last download (0 = from the start).
     std::uint64_t lastOffset() const { return lastOffset_.load(); }
+    std::uint64_t maxOffset() const { return maxOffset_.load(); }  // largest offset ever asked
     // Download speed cap in bytes per second (0 = unlimited).
     void setThroughput(std::uint64_t bytesPerSecond) { throughput_ = bytesPerSecond; }
     void setChunkSize(std::size_t bytes) { chunkSize_ = bytes; }
@@ -108,6 +109,7 @@ class MockRemoteSource : public IRemoteSource {
     std::uint64_t throughput_ = 0;
     bool resumeSupported_ = true;
     std::atomic<std::uint64_t> lastOffset_{0};
+    std::atomic<std::uint64_t> maxOffset_{0};
     std::size_t chunkSize_ = 16 * 1024;  // like curl's default write chunk
     std::atomic<int> fetchCount_{0};
     std::atomic<int> downloadCount_{0};

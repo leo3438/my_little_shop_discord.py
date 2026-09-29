@@ -10,7 +10,7 @@
         "retroarch_found": "RetroArch : installé",
         "retroarch_missing": "RetroArch : introuvable sur la carte SD",
         "init_failed": "Impossible de préparer les dossiers de RetroManager : {}",
-        "version": "v{} - Phase 8 - File de téléchargements",
+        "version": "v{} - Phase 9 - Web, scraping & sources",
         "shop": "Boutique : {}",
         "saves": "Sauvegardes cloud : {}",
         "saves_not_configured": "Sauvegardes cloud : non configurées (saves_url)"
@@ -146,6 +146,29 @@
         "kind_rom": "Jeu",
         "kind_app": "Application",
         "resumed": "reprise à {}",
-        "error_network_resumable": "La connexion au NAS a été perdue. Relancez le téléchargement : il reprendra là où il s'est arrêté."
+        "error_network_resumable": "La connexion au NAS a été perdue. Relancez le téléchargement : il reprendra là où il s'est arrêté.",
+        "restored": "{} téléchargement(s) repris après le redémarrage"
+    },
+    "sources": {
+        "title": "Sources",
+        "hint": "A : utiliser ou supprimer  ·  X : ajouter une source (NAS FTP ou boutique web HTTP)",
+        "active": "active",
+        "empty": "Aucune source : ajoutez-en une avec X.",
+        "add": "Ajouter une source",
+        "use": "Utiliser",
+        "delete": "Supprimer",
+        "type_ftp": "NAS (FTP)",
+        "type_http": "Web (HTTP)",
+        "type_mock": "Démo",
+        "prompt_name": "Nom de la source",
+        "prompt_url": "Adresse de l'index",
+        "prompt_url_hint": "ftp://nas/shop/  ou  https://site/shop.json",
+        "prompt_user": "Identifiant (facultatif)",
+        "prompt_user_hint": "Laissez vide pour un accès anonyme",
+        "prompt_password": "Mot de passe",
+        "added": "Source ajoutée : {}",
+        "deleted": "Source supprimée : {}",
+        "activated": "Boutique : {}",
+        "error": "Impossible : {}"
     }
 }
