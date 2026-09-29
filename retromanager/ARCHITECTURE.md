@@ -31,7 +31,8 @@ contredit, on modifie d'abord ce document.
 ```mermaid
 graph TD
     UI["ui/ : Activities & vues Borealis"]
-    SVC["services/ : ShopService ✅, DownloadQueueManager ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
+    SVC["services/ : ShopService ✅, DownloadQueueManager ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, CloudSync ✅, ForwarderBuilder ✅"]
+    FWD["forwarder/ : Aes128 ✅, Sha256 ✅, IconMaker ✅ (stb), nsp/ ✅ (PFS0, RomFS, IVFC, NCA, NACP, CNMT, NPDM)"]
     PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgDocument ✅, IniParser, ChtParser"]
     FS["fs/ : FileInstall ✅, RomStore ✅"]
     NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SourceFactory ✅, SmbClient, HttpClient"]
@@ -46,6 +47,8 @@ graph TD
     SVC --> PARSE
     SVC --> FS
     SVC --> NET
+    SVC --> FWD
+    FWD --> CORE
     FS --> PLAT
     FS --> MODELS
     NET --> CORE
@@ -62,6 +65,7 @@ graph TD
 | `parsers/` | Fonctions **pures** texte ⇄ structures : index JSON, `config.json`, `CfgDocument` (`.cfg` / `.cht` RetroArch, édition sans perte) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
 | `fs/` | Opérations SD typées : `FileInstall` (écriture en flux vers un fichier caché, tampon 1 Mio, CRC-32, contrôle d'en-tête, espace libre, publication atomique) et `RomStore` (destination `/roms/<système>/`) | `platform`, `models`, `core` | parler au réseau |
 | `network/` | Déplace des octets derrière `IRemoteSource` (index en mémoire, ROMs en flux vers un `ChunkSink`) | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD |
+| `forwarder/` | Crypto (AES-128 ECB/CTR/XTS, SHA-256), icône (stb), et `nsp/` : écriture et relecture des formats Switch d'un forwarder, isolées du reste | `core` (+ stb, en-têtes seuls) | toucher la SD, le réseau ou Borealis : octets en entrée, octets en sortie |
 | `services/` | Cas d'usage : orchestrent parsers, fs et network | tout ce qui précède | inclure Borealis |
 | `ui/` | Affichage et navigation Borealis | `services`, `models`, `core` | appeler un parser, un `IRemoteSource` ou `IFileSystem` directement |
 
@@ -73,7 +77,7 @@ graph TD
 
 | Cible | Contenu | Plateformes |
 |---|---|---|
-| `retromanager_core` | `src/core`, `src/models`, `src/parsers`, `src/fs`, `src/services`, `src/platform/common`, `MockRemoteSource` | toutes : c'est ce qu'on teste |
+| `retromanager_core` | `src/core`, `src/models`, `src/parsers`, `src/fs`, `src/forwarder`, `src/services`, `src/platform/common`, `MockRemoteSource` | toutes : c'est ce qu'on teste |
 | `retromanager_curl` | `FtpClient`, `SourceFactory` (libcurl). Option `RM_WITH_CURL`, activée par défaut | toutes |
 | `RetroManager` | `src/main.cpp`, `src/ui`, **une seule** implémentation de `src/platform/{switch,desktop}` + Borealis | desktop, Switch (`.nro`) |
 | `retromanager_mocks` | `tests/mocks` : `MemoryFileSystem`, chargeur de fausse SD | desktop (tests) |
@@ -453,7 +457,67 @@ flowchart LR
   ancien d'écraser un plus récent quand l'UI et le worker enregistrent en
   même temps.
 
-### 4.9 Asynchronisme
+### 4.9 Flux implémenté (Phase 10) : raccourcis HOME (forwarders)
+
+```mermaid
+flowchart LR
+    UI[GamesListActivity : X sur un jeu INSTALLÉ] --> A[ForwarderActivity : spinner]
+    A -- WorkerThread --> B[ForwarderBuilder]
+    B --> K[/switch/prod.keys/]
+    B --> S[/switch/RetroManager/stub/]
+    B --> R[RomStore + cores RetroArch]
+    B --> I[IconMaker : jaquette -> JPEG 256x256]
+    B --> N[nsp::buildApplicationNsp]
+    N --> V[nsp::readApplicationNsp : auto-vérification]
+    V --> O[/nsp/titre.nsp/]
+```
+
+- **`ForwarderBuilder`** (`services/`) : vérifie les prérequis (clés, stub),
+  retrouve la ROM (`RomStore`), choisit le premier core RetroArch installé
+  parmi les candidats du système (`gba` : mgba, vba_next, gpsp…), fabrique
+  l'icône, décrit l'application et écrit `/nsp/<titre>.nsp` atomiquement.
+  Chaque échec est un `ForwarderIssue` précis (clés absentes, clé manquante,
+  fichier du stub absent, NPDM invalide, ROM absente, core absent, écriture
+  impossible) que l'UI traduit en message disant **quel fichier mettre où**.
+  Le « packager » est injectable : les tests en mettent un qui enregistre la
+  description (titre, icône, arguments) sans rien chiffrer.
+- **Lancement** : le stub (fourni par l'utilisateur, type nx-hbloader
+  forwarder) lance `romfs:/nextNroPath` avec `romfs:/nextArgv`. RetroManager
+  y écrit `sdmc:/retroarch/cores/<core>_libretro_libnx.nro` et
+  `"<core>" "sdmc:/roms/<système>/<rom>"`.
+- **Title ID** : `0x05` + 44 bits d'un SHA-256 du chemin de la ROM + `000` :
+  stable (regénérer remplace le même titre), dans la plage homebrew.
+- **`IconMaker`** (`forwarder/`) : stb_image (PNG, JPEG…), mise à l'échelle
+  (stb_image_resize2) *sans recadrer* dans un carré 256x256, bandes remplies
+  avec la couleur moyenne du bord, JPEG (stb_image_write) dont la qualité
+  baisse jusqu'à tenir sous 128 Kio. Sans jaquette : icône unie par système.
+  stb est compilé une seule fois, en fonctions `static`
+  (`StbImage.cpp`), pour ne pas entrer en conflit avec la copie de nanovg.
+- **`nsp/`** (la partie « hacbrewpack », isolée : octets en entrée, octets en
+  sortie, aucune dépendance à la SD) :
+  - conteneurs : PFS0, RomFS (tables de hachage comprises : la console y
+    cherche `nextNroPath`), HierarchicalSha256 et IVFC (6 niveaux, blocs de
+    0x4000) ;
+  - NCA3 : en-tête chiffré AES-XTS (`header_key`, tweak big-endian à la
+    Nintendo), sections AES-CTR avec une clé de contenu aléatoire rangée dans
+    la key area (`key_area_key_application_00`, génération de clés 0 : toute
+    version du firmware) ; pas de rights id, donc ni ticket ni certificat ;
+  - métadonnées : NACP (titre pour les 16 langues), CNMT (application), NPDM
+    du stub patché avec le title id (ACI0 + plage ACID) ;
+  - NSP = PFS0 de `<id>.nca` (programme : ExeFS + RomFS [+ logo]),
+    `<id>.nca` (contrôle : `control.nacp` + `icon_<Langue>.dat`) et
+    `<id>.cnmt.nca`, l'id étant le début du SHA-256 de chaque NCA ;
+  - lecteurs symétriques (`readNca`, `readApplicationNsp`) : ils vérifient
+    tout (hachages, ids, tailles, title ids) et servent aux tests **et** à
+    l'auto-vérification avant écriture.
+- **Signatures** : impossibles à produire sans les clés privées de Nintendo
+  (signature de l'en-tête NCA, signature NPDM/ACID) : les sigpatches sont
+  nécessaires sur la console, l'écran de bilan le rappelle.
+- **Secrets** : `prod.keys` est lu, jamais journalisé ni recopié ; les
+  messages d'erreur nomment la clé, jamais sa valeur. Les tests n'utilisent
+  que des clés factices.
+
+### 4.10 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
@@ -482,7 +546,7 @@ flowchart LR
   leur destructeur annule tout et attend la fin du transfert en cours. Dans
   `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.10 Gestion des erreurs
+### 4.11 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -508,8 +572,13 @@ traverse une frontière de couche (le parser attrape celles de nlohmann/json).
    nettoyage du `.tmp`, fichier absent, identifiants jamais envoyés à un autre
    hôte, `verifyTls` on/off, reprise REST et Range. Ignorés (`SKIPPED`) sans
    `RM_TEST_FTP_PORT` / `RM_TEST_FTPS_PORT` / `RM_TEST_HTTP_PORT`.
+   Forwarders : vecteurs officiels (FIPS-197, SP 800-38A, IEEE 1619,
+   FIPS 180-4) pour la crypto, allers-retours écriture/lecture pour chaque
+   format, et **contre-vérification indépendante** avec hactool
+   (`RM_HACTOOL`, clés factices) : tous les hachages GOOD et les sections
+   déchiffrées identiques octet pour octet.
 5. **CI** (`.github/workflows/retromanager.yml`) : tests sous ASan et UBSan
-   avec les deux serveurs, build desktop, libcurl compilée depuis les
+   avec les serveurs et hactool, build desktop, libcurl compilée depuis les
    sources, build Switch `.nro` dans le conteneur `devkitpro/devkita64`.
 
 ---
@@ -547,4 +616,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 7 | App Store personnel : sections `apps` / `emulators`, `AppManager` (`/switch/<nom>/<nom>.nro`, en-tête NRO, `icon.jpg`, versions installées), pipeline de téléchargement générique (`FileInstall`, `DownloadJob`), écran « Émulateurs & Homebrews » | ✅ |
 | 8 | File de téléchargements (`DownloadQueueManager`, écran « Téléchargements »), reprise FTP `REST` (écritures reprenables dans `IFileSystem`), « Mettre à jour N applications », icône `<nom>.jpg` | ✅ |
 | 9 | `HttpClient` (reprise `Range`), sources multiples (`SourceRouter`, `SourceCatalog`, écran « Sources »), scraper de jaquettes libretro, file persistante (`queue.json`, reprise au lancement) | ✅ |
-| 10+ | Source SMB, forwarders, identification des ROMs par CRC (bases libretro) | — |
+| 10 | Forwarders : crypto (AES-128, SHA-256), icône 256x256 (stb), écriture NSP isolée (`nsp/`), `ForwarderBuilder`, X « Créer un raccourci (Forwarder) » sur un jeu installé | ✅ |
+| 11+ | Source SMB, identification des ROMs par CRC (bases libretro) | — |

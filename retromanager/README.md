@@ -10,6 +10,7 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Émulateurs & Homebrews (build desktop)](docs/apps-desktop.png)
 ![File de téléchargements (build desktop)](docs/downloads-desktop.png)
 ![Sources (build desktop)](docs/sources-desktop.png)
+![Raccourci HOME (build desktop)](docs/forwarder-desktop.png)
 
 Après chaque téléchargement, RetroManager intègre le jeu à RetroArch : il
 l'ajoute à la playlist de son système (il apparaît directement dans le menu
@@ -39,6 +40,13 @@ depuis la boutique.
 Le bouton « Synchroniser les sauvegardes » échange les `.srm` / `.sav` de
 RetroArch avec un dossier du NAS (`saves_url`), dans les deux sens, sans
 jamais perdre une version en cas de conflit.
+
+Sur un jeu installé, X « Créer un raccourci (Forwarder) » génère
+`/nsp/<titre>.nsp` : une icône sur l'accueil de la console qui lance
+directement le jeu dans RetroArch (jaquette en icône, core choisi selon le
+système). Il faut vos `prod.keys` et un stub de forwarder sur la carte, puis
+l'installer avec DBI ou Tinfoil (sigpatches requis) : voir
+[docs/FORWARDERS.md](docs/FORWARDERS.md).
 
 L'organisation du code est décrite dans [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -93,6 +101,8 @@ python3 tools/test_ftp_server.py --port-file /tmp/ftp.port --ftps-port-file /tmp
     --http-port-file /tmp/http.port &
 RM_TEST_FTP_PORT=$(cat /tmp/ftp.port) RM_TEST_FTPS_PORT=$(cat /tmp/ftps.port) \
     RM_TEST_HTTP_PORT=$(cat /tmp/http.port) ctest --preset tests
+# + contre-vérification des NSP générés par hactool (clés factices)
+RM_HACTOOL=/chemin/vers/hactool ctest --preset tests -R ApplicationNsp
 
 # Switch
 cmake --preset switch && cmake --build --preset switch
