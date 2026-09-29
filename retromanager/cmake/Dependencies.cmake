@@ -49,6 +49,9 @@ if (RM_WITH_SMB)
         target_compile_definitions(smb2 PRIVATE __SWITCH__)
         # Its Switch compat.h only includes <sys/types.h>, yet aes.h and
         # others use uint8_t: provide <stdint.h> to every libsmb2 source.
+        # That header fixes newlib's feature set before the sources' own
+        # "#define _GNU_SOURCE" (asprintf...), so define it up front too.
+        target_compile_definitions(smb2 PRIVATE _GNU_SOURCE)
         target_compile_options(smb2 PRIVATE -include stdint.h)
     endif ()
 endif ()
