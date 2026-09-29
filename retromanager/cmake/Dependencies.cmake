@@ -43,6 +43,11 @@ if (RM_WITH_SMB)
         GIT_TAG c796ab389328d597ea2135717092d3802015f91f
     )
     FetchContent_MakeAvailable(libsmb2)
+    if (PLATFORM_SWITCH)
+        # Its Switch compat.h only includes <sys/types.h>, yet aes.h and
+        # others use uint8_t: provide <stdint.h> to every libsmb2 source.
+        target_compile_options(smb2 PRIVATE -include stdint.h)
+    endif ()
 endif ()
 
 if (RM_BUILD_TESTS)
