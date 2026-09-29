@@ -33,7 +33,7 @@ graph TD
     UI["ui/ : Activities & vues Borealis"]
     SVC["services/ : ShopService ✅, DownloadService ✅, ConfigManager ✅, EmulatorConfigurator ✅, CheatManager ✅, EmulatorConfigurator, CheatManager, CloudSync, ForwarderBuilder, Scraper"]
     PARSE["parsers/ : RepoIndexParser ✅, ConfigParser ✅, CfgDocument ✅, IniParser, ChtParser"]
-    FS["fs/ : RomStore ✅, SaveStore, BiosStore"]
+    FS["fs/ : FileInstall ✅, RomStore ✅"]
     NET["network/ : IRemoteSource ✅, MockRemoteSource ✅, FtpClient ✅, SourceFactory ✅, SmbClient, HttpClient"]
     PLAT["platform/ : IFileSystem, ISystem, VirtualPath, SdLayout, Platform"]
     CORE["core/ : Result, AppContext, ITaskRunner, WorkerThread, EventBus, Cancellation, Crc32, Url, Format"]
@@ -60,7 +60,7 @@ graph TD
 | `models/` | Données pures partagées par toutes les couches (`GameEntry`, `RepoIndex`, `SystemSection`, `AppConfig`) et catalogue des systèmes | `core` | contenir du comportement autre que des accesseurs |
 | `platform/` | Abstractions système (`IFileSystem`, `ISystem` : anti-veille) + implémentations par plateforme | `core` | contenir de la logique métier |
 | `parsers/` | Fonctions **pures** texte ⇄ structures : index JSON, `config.json`, `CfgDocument` (`.cfg` / `.cht` RetroArch, édition sans perte) | `core`, nlohmann/json | faire des E/S : ils reçoivent et rendent des chaînes |
-| `fs/` | Opérations SD typées : `RomStore` (destination, espace libre, installation atomique vérifiée par CRC) | `platform`, `models`, `core` | parler au réseau |
+| `fs/` | Opérations SD typées : `FileInstall` (écriture en flux vers un fichier caché, tampon 1 Mio, CRC-32, contrôle d'en-tête, espace libre, publication atomique) et `RomStore` (destination `/roms/<système>/`) | `platform`, `models`, `core` | parler au réseau |
 | `network/` | Déplace des octets derrière `IRemoteSource` (index en mémoire, ROMs en flux vers un `ChunkSink`) | `core` (+ libcurl pour `FtpClient`) | parser un index, écrire sur la SD |
 | `services/` | Cas d'usage : orchestrent parsers, fs et network | tout ce qui précède | inclure Borealis |
 | `ui/` | Affichage et navigation Borealis | `services`, `models`, `core` | appeler un parser, un `IRemoteSource` ou `IFileSystem` directement |
@@ -198,7 +198,7 @@ sequenceDiagram
     end
     D->>R: downloadFile(url, sink, progress, token)
     loop blocs de ~16-256 Kio
-        R->>F: sink → RomInstall::write (tampon 1 Mio, CRC32 au fil de l'eau)
+        R->>F: sink → FileInstall::write (tampon 1 Mio, CRC32 au fil de l'eau)
         D-->>B: Progressed (≤ 10 par seconde)
     end
     UI->>D: cancel(id) sur B → token → curl abandonne, .tmp supprimé
@@ -231,6 +231,13 @@ La mémoire consommée ne dépend pas de la taille de la ROM : tampon
 d'écriture de 1 Mio + tampon de réception curl de 256 Kio. Le test
 d'intégration mesure la mémoire résidente pendant un téléchargement de
 64 Mio : environ +1,2 Mio (échec au-delà de 16 Mio).
+
+**Téléchargements génériques** (Phase 7) : `DownloadService` exécute des
+`DownloadJob` (titre, URL, destination, et trois fonctions : `begin` crée le
+`FileInstall`, `afterInstall` fait le travail qui suit avec le CRC mesuré,
+`onFailed` range ce que le job a créé). `start(GameEntry)` construit le job
+d'une ROM (RomStore + étapes post-installation), `AppManager::job()` celui
+d'un homebrew : même flux, même annulation, mêmes événements, même écran.
 
 ### 4.4 Flux implémenté (Phase 5) : synchroniser les sauvegardes
 
@@ -315,7 +322,35 @@ et la section `bios` de l'index de la boutique.
 système, A sur une ligne pour télécharger, X pour tout télécharger. Si le
 serveur est injoignable, l'état de la carte SD s'affiche quand même.
 
-### 4.6 Asynchronisme
+### 4.6 Flux implémenté (Phase 7) : App Store personnel
+
+Sections `apps` et `emulators` de l'index → `AppEntry` (titre, auteur,
+version, description, `url_nro`, `url_icon`, dossier). `AppManager` :
+
+- **Emplacement** : `/switch/<dossier>/<dossier>.nro` (disposition standard
+  de hbmenu), le dossier étant le titre (ou le champ `folder`) rendu sûr
+  pour FAT ; un nom dangereux (`..`, `/`, fichier caché) est refusé dès
+  l'index.
+- **Téléchargement** : le job passe par le même `FileInstall` que les ROMs
+  (flux, `.tmp`, espace, CRC facultatif) avec en plus un **contrôle d'en-tête
+  NRO** (`NRO0` à l'octet 0x10) dès les premiers octets : une page d'erreur
+  ou un fichier tronqué ne remplace jamais un homebrew qui marche. Taille
+  absente de l'index : demandée au serveur (listing) pour que le contrôle
+  d'espace ait lieu. Échec d'une première installation : le dossier vide
+  est supprimé (pas de dossier fantôme dans hbmenu).
+- **Après** : l'icône (`/switch/<dossier>/icon.jpg`, JPEG vérifié, 2 Mio
+  max ; un échec n'annule pas l'installation), puis la version installée est
+  notée dans `/switch/RetroManager/apps.json`.
+- **État** : non installé, installé (`.nro` présent ; version inconnue si
+  installé à la main), mise à jour disponible (version notée ≠ version de
+  l'index).
+
+`AppsListActivity` : deux sections (Émulateurs, Homebrews), version et
+auteur sous le titre, tag « INSTALLÉ » / « MISE À JOUR » rafraîchi après
+chaque téléchargement ; `DownloadActivity` (générique) affiche « Application
+installée dans /switch/... ».
+
+### 4.7 Asynchronisme
 
 - Les opérations longues passent par `ITaskRunner` (`core/ITaskRunner.hpp`) :
   - `ui::BorealisTaskRunner` (`brls::async` / `brls::sync`) pour les tâches
@@ -344,7 +379,7 @@ serveur est injoignable, l'état de la carte SD s'affiche quand même.
   leur destructeur annule tout et attend la fin du transfert en cours. Dans
   `main()`, ils sont déclarés en dernier pour être détruits en premier.
 
-### 4.7 Gestion des erreurs
+### 4.8 Gestion des erreurs
 
 `Result<T>` / `Status` à chaque frontière. Les services ajoutent du contexte au
 message ; l'UI traduit `ErrorCode` en message localisé (i18n : réseau,
@@ -404,4 +439,5 @@ Nommage : `IXxx` pour une interface, un fichier par classe, espace de noms
 | 4 | Anti-veille (`ISystem`), `CfgDocument`, `EmulatorConfigurator`, `CheatManager` (`cheat_url`), étapes post-installation, tag « Installé » | ✅ |
 | 5 | Envoi FTP en flux + listing (MLSD / NLST), `CloudSyncService` (manifeste, conflits sans perte), `IniDocument`, `SysClkConfigurator`, écran « Synchroniser les sauvegardes » | ✅ |
 | 6 | Playlists RetroArch (`PlaylistDocument`, `PlaylistManager`), jaquettes (`ThumbnailManager`), BIOS (catalogue, MD5, section `bios` de l'index, `BiosManager`, écran « Vérification des BIOS »), sys-clk sur l'applet Album | ✅ |
-| 7+ | File de téléchargements, sources HTTP/SMB, scraping automatique (bases libretro), forwarders | — |
+| 7 | App Store personnel : sections `apps` / `emulators`, `AppManager` (`/switch/<nom>/<nom>.nro`, en-tête NRO, `icon.jpg`, versions installées), pipeline de téléchargement générique (`FileInstall`, `DownloadJob`), écran « Émulateurs & Homebrews » | ✅ |
+| 8+ | File de téléchargements, sources HTTP/SMB, scraping automatique (bases libretro), forwarders | — |

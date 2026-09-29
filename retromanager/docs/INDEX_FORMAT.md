@@ -28,6 +28,14 @@ Parser : `src/parsers/RepoIndexParser.cpp` · Tests : `tests/unit/RepoIndexParse
     },
     { "url": "roms/snes/Super%20Mario%20World%20(USA).sfc", "size": 524288 }
   ],
+  "emulators": [
+    { "title": "melonDS", "author": "Arisotura", "version": "0.9.5",
+      "description": "Émulateur Nintendo DS.", "url_nro": "apps/melonDS/melonDS.nro" }
+  ],
+  "apps": [
+    { "title": "RetroArch", "author": "libretro", "version": "1.19.1",
+      "url_nro": "apps/RetroArch/retroarch_switch.nro", "url_icon": "apps/RetroArch/icon.jpg" }
+  ],
   "bios": [
     { "file": "scph5501.bin", "system": "psx", "url": "bios/scph5501.bin",
       "md5": "490f666e1afb15b7362b406ed1cea246", "size": 524288 },
@@ -43,8 +51,9 @@ Parser : `src/parsers/RepoIndexParser.cpp` · Tests : `tests/unit/RepoIndexParse
 | `version` | entier ≥ 1 | non (défaut 1) | Version du format. Une version supérieure à celle supportée est refusée (`Unsupported`). |
 | `name` | chaîne | non | Nom affiché de la boutique. |
 | `success` | chaîne | non | Message d'accueil (même champ que Tinfoil). |
-| `games` | tableau | `games` et/ou `files` | Entrées de jeux. |
-| `files` | tableau | `games` et/ou `files` | Alias Tinfoil, même format d'entrée. Traité après `games`. |
+| `games` | tableau | au moins une section parmi `games`, `files`, `apps`, `emulators` | Entrées de jeux. |
+| `files` | tableau | idem | Alias Tinfoil, même format d'entrée. Traité après `games`. |
+| `apps`, `emulators` | tableaux | idem | Homebrews Switch (`.nro`), affichés dans « Émulateurs & Homebrews » en deux sections. Voir plus bas. |
 | `bios` | tableau | non | Fichiers BIOS que la boutique peut fournir (écran « Vérification des BIOS »). Voir plus bas. |
 | `directories` | tableau | non | Sous-index Tinfoil : **pas encore supporté**, ignoré avec un avertissement. |
 
@@ -121,6 +130,25 @@ est accepté (affiché tel quel, en fin de liste). Les extensions ambiguës
 (`.zip`, `.7z`, `.iso`, `.chd`…) ne permettent pas de déduire le système :
 renseignez `system`. Liste de référence : `src/models/Systems.cpp`.
 
+## Sections `apps` et `emulators`
+
+| Champ | Type | Défaut si absent |
+|---|---|---|
+| `title` | chaîne, **obligatoire** | — |
+| `url_nro` (alias `url`) | chaîne (URL, relative acceptée), **obligatoire** | — |
+| `author` | chaîne | vide |
+| `version` | chaîne libre (`1.19.1`, `v2.0-beta`) : comparée à la version installée pour afficher « MISE À JOUR » | vide (pas de détection) |
+| `description` | chaîne | vide |
+| `url_icon` | chaîne (URL) d'une icône **JPEG** (256×256 conseillé), installée en `/switch/<dossier>/icon.jpg` | vide |
+| `folder` | nom du dossier et du `.nro` | le titre, rendu sûr pour FAT |
+| `size` | entier ≥ 0, en octets | demandée au serveur au moment du téléchargement |
+| `crc32` | 8 chiffres hexadécimaux, vérifié | vide |
+
+L'application est installée en `/switch/<dossier>/<dossier>.nro`, par
+exemple `/switch/RetroArch/RetroArch.nro`. Le fichier doit être un vrai NRO
+(en-tête `NRO0`) : sinon rien n'est installé. Deux entrées qui aboutiraient
+au même dossier (casse ignorée, comme sur FAT) : la première est gardée.
+
 ## Section `bios`
 
 | Champ | Type | Défaut si absent |
@@ -156,7 +184,7 @@ catalogue (`neogeo.zip`…) apparaît aussi dans l'écran, sous son système.
 | Situation | Effet |
 |---|---|
 | JSON invalide, UTF-8 invalide, document vide | Rejet (`ParseError`, avec ligne et colonne) |
-| Racine autre qu'un objet, ni `games` ni `files`, `games` non tableau | Rejet (`ParseError`) |
+| Racine autre qu'un objet, aucune des sections `games` / `files` / `apps` / `emulators`, l'une d'elles pas un tableau | Rejet (`ParseError`) |
 | `version` supérieure à 1 | Rejet (`Unsupported`) |
 | Entrée invalide : pas d'URL, mauvais type, taille négative, CRC mal formé, URL relative sans base… | **Entrée ignorée** et avertissement : le reste de la boutique s'affiche |
 | Deux entrées avec le même `id` (ou le même fichier final dans le même système) | La première est gardée, avertissement |

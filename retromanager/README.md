@@ -7,6 +7,7 @@ rétro ». C++17, libnx, [Borealis](https://github.com/xfangfang/borealis).
 ![Téléchargement (build desktop)](docs/download-desktop.png)
 ![Synchronisation des sauvegardes (build desktop)](docs/sync-desktop.png)
 ![Vérification des BIOS (build desktop)](docs/bios-desktop.png)
+![Émulateurs & Homebrews (build desktop)](docs/apps-desktop.png)
 
 Après chaque téléchargement, RetroManager intègre le jeu à RetroArch : il
 l'ajoute à la playlist de son système (il apparaît directement dans le menu
@@ -14,6 +15,10 @@ principal), installe sa jaquette et ses codes de triche si la boutique en
 fournit, et règle le navigateur de fichiers sur son dossier (éditions qui
 préservent le reste des fichiers). Pour les jeux N64 / PlayStation, il règle
 aussi sys-clk (CPU à 1785 MHz pour RetroArch).
+
+L'écran « Émulateurs & Homebrews » est un App Store personnel : il installe
+les `.nro` de votre NAS (RetroArch, melonDS, pNES…) dans
+`/switch/<nom>/<nom>.nro`, avec leur icône, et signale les mises à jour.
 
 L'écran « Vérification des BIOS » liste les BIOS attendus par les cœurs
 (GBA, PlayStation, DS…), vérifie leur MD5 et télécharge ceux qui manquent
