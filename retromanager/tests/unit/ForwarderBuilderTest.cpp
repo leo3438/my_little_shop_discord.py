@@ -61,7 +61,15 @@ class CheckedFileSystem : public test::MemoryFileSystem {
     enum class Nsp { Normal, Missing, Truncated };
     Nsp nsp = Nsp::Normal;
 
+    int commits = 0;
+    bool committedBeforeCheck = false;  // the card was committed before the NSP was read back
+    Status commit() override {
+        ++commits;
+        return success();
+    }
+
     Result<FileInfo> stat(std::string_view path) override {
+        if (path.size() > 4 && path.substr(path.size() - 4) == ".nsp" && commits > 0) committedBeforeCheck = true;
         const bool isNsp = path.size() > 4 && path.substr(path.size() - 4) == ".nsp";
         if (isNsp && nsp == Nsp::Missing) return makeError(ErrorCode::NotFound, std::string(path));
         auto info = test::MemoryFileSystem::stat(path);
@@ -141,19 +149,46 @@ TEST_F(ForwarderBuilderTest, InjectsTitleIconAndLaunchArguments) {
     EXPECT_EQ(str(spec.exefs[0].data), "STUB-CODE");
     EXPECT_TRUE(spec.logo.empty());
 
-    EXPECT_EQ(report.nspPath, "/nsp/Tom & Jerry.nsp");
-    EXPECT_EQ(fs.readFile("/nsp/Tom & Jerry.nsp").value(), "NSP");
+    EXPECT_EQ(report.nspPath, "/nsp/Tom Jerry.nsp");
+    EXPECT_EQ(fs.readFile("/nsp/Tom Jerry.nsp").value(), "NSP");
     EXPECT_EQ(report.corePath, kCore);
     EXPECT_EQ(report.romPath, kRom);
     EXPECT_EQ(report.titleId, spec.titleId);
     EXPECT_EQ(report.sizeBytes, 3u);
 }
 
+TEST_F(ForwarderBuilderTest, NspFileNameIsAsciiButTheTitleKeepsItsAccents) {
+    ForwarderReport report = builder(recorder.packager()).build(gbaGame("Pokémon Black Version"), cancel);
+    ASSERT_TRUE(report.ok()) << report.detail;
+    EXPECT_EQ(report.nspPath, "/nsp/Pokemon Black Version.nsp");
+    EXPECT_TRUE(fs.isFile("/nsp/Pokemon Black Version.nsp"));
+    EXPECT_FALSE(fs.exists("/nsp/Pokémon Black Version.nsp"));
+    EXPECT_EQ(report.title, "Pokémon Black Version");
+    EXPECT_EQ(nsp::nacpName(recorder.spec.nacp), "Pokémon Black Version");  // HOME menu shows the real title
+}
+
+TEST_F(ForwarderBuilderTest, TitleWithoutAnyAsciiUsesTheRomNameThenAFallback) {
+    GameEntry game = gbaGame("ポケモン");
+    ForwarderReport report = builder(recorder.packager()).build(game, cancel);
+    ASSERT_TRUE(report.ok()) << report.detail;
+    EXPECT_EQ(report.nspPath, "/nsp/Tom Jerry USA.nsp");  // from "Tom _ Jerry (USA).gba"
+
+    game.fileName = "ポケモン.gba";
+    EXPECT_EQ(builder(recorder.packager()).outputPathFor(game).substr(0, 15), "/nsp/Forwarder ");
+}
+
+TEST_F(ForwarderBuilderTest, TheCardIsCommittedBeforeTheNspIsReadBack) {
+    ForwarderReport report = builder(recorder.packager()).build(gbaGame(), cancel);
+    ASSERT_TRUE(report.ok()) << report.detail;
+    EXPECT_EQ(fs.commits, 1);
+    EXPECT_TRUE(fs.committedBeforeCheck);
+}
+
 TEST_F(ForwarderBuilderTest, NspThatDoesNotLandOnTheCardIsAnError) {
     fs.nsp = CheckedFileSystem::Nsp::Missing;
     ForwarderReport report = builder(recorder.packager()).build(gbaGame(), cancel);
     EXPECT_EQ(report.issue, ForwarderIssue::WriteFailed);
-    EXPECT_NE(report.detail.find("/nsp/Tom & Jerry.nsp"), std::string::npos) << report.detail;
+    EXPECT_NE(report.detail.find("/nsp/Tom Jerry.nsp"), std::string::npos) << report.detail;
 
     fs.nsp = CheckedFileSystem::Nsp::Truncated;
     report = builder(recorder.packager()).build(gbaGame(), cancel);
@@ -251,14 +286,14 @@ TEST_F(ForwarderBuilderTest, NoBoxArtMeansAPlaceholderIcon) {
 
 TEST_F(ForwarderBuilderTest, FileNameIsSanitized) {
     GameEntry g = gbaGame("Zelda: Minish Cap?");
-    EXPECT_EQ(builder(recorder.packager()).outputPathFor(g), "/nsp/Zelda_ Minish Cap_.nsp");
+    EXPECT_EQ(builder(recorder.packager()).outputPathFor(g), "/nsp/Zelda Minish Cap.nsp");
 }
 
 TEST_F(ForwarderBuilderTest, CancelledBeforeWriting) {
     cancel.cancel();
     ForwarderReport report = builder(recorder.packager()).build(gbaGame(), cancel);
     EXPECT_EQ(report.issue, ForwarderIssue::Cancelled);
-    EXPECT_FALSE(fs.exists("/nsp/Tom & Jerry.nsp"));
+    EXPECT_FALSE(fs.exists("/nsp/Tom Jerry.nsp"));
 }
 
 TEST_F(ForwarderBuilderTest, ReadOnlyCardIsAWriteFailure) {
@@ -274,7 +309,7 @@ TEST_F(ForwarderBuilderTest, PackagerFailureIsReported) {
     ForwarderReport report = builder(failing).build(gbaGame(), cancel);
     EXPECT_EQ(report.issue, ForwarderIssue::Failed);
     EXPECT_NE(report.detail.find("self-check failed"), std::string::npos);
-    EXPECT_FALSE(fs.exists("/nsp/Tom & Jerry.nsp"));
+    EXPECT_FALSE(fs.exists("/nsp/Tom Jerry.nsp"));
 }
 
 TEST_F(ForwarderBuilderTest, EndToEndWithTheRealPackager) {

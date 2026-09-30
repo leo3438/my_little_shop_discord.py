@@ -43,6 +43,7 @@ struct ForwarderReport {
     std::string corePath;     // virtual path of the core the forwarder starts
     std::string romPath;
     bool placeholderIcon = false;  // no box art on the card: a plain icon was used
+    std::string warning;           // not fatal (the NSP was read back fine), shown and logged
     std::uint64_t sizeBytes = 0;
 
     bool ok() const { return issue == ForwarderIssue::None; }

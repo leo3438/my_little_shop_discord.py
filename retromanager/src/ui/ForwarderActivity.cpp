@@ -91,6 +91,10 @@ void ForwarderActivity::onBuilt(const ForwarderReport& report) {
                                            formatBytes(report.sizeBytes) + ")", report.corePath, report.romPath,
                                            nsp::titleIdHex(report.titleId));
         if (report.placeholderIcon) details += "\n" + brls::getStr("retromanager/forwarder/placeholder_icon");
+        if (!report.warning.empty()) {
+            brls::Logger::warning("Forwarder for {}: {}", report.title, report.warning);
+            details += "\n" + brls::getStr("retromanager/forwarder/warning", report.warning);
+        }
         details += "\n\n" + brls::getStr("retromanager/forwarder/sigpatches");
         finish(brls::getStr("retromanager/forwarder/done"), details);
         return;

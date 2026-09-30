@@ -109,6 +109,10 @@ class IFileSystem {
     // tell: callers must then proceed without the check.
     virtual Result<std::uint64_t> availableSpace(std::string_view path) = 0;
 
+    // Forces what was written so far onto the medium (the console's SD card:
+    // fsdevCommitDevice). A no-op where the OS flushes on close.
+    virtual Status commit() { return success(); }
+
     // Convenience helpers built on the primitives above (shared by every
     // implementation, so they behave identically everywhere).
     bool exists(std::string_view path);

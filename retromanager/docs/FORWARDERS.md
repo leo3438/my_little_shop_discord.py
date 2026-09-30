@@ -66,7 +66,14 @@ reste affiché sur l'écran après « Fermer »), par exemple :
 - Le fichier est écrit dans **`sdmc:/nsp/<titre du jeu>.nsp`** (dossier `nsp`
   à la racine de la carte, créé s'il n'existe pas). Le chemin exact et la
   taille sont affichés à l'écran et dans le journal. Après l'écriture,
-  RetroManager relit la carte : un fichier absent ou tronqué est une erreur.
+  RetroManager force l'écriture sur la carte (`fsdevCommitDevice`) puis la
+  relit : un fichier absent ou tronqué est une erreur.
+- Le **nom du fichier est en ASCII** pour que DBI, Tinfoil et le système le
+  voient : accents retirés, ponctuation remplacée par des espaces
+  (« Pokémon Black Version » → `Pokemon Black Version.nsp`, « Tom & Jerry »
+  → `Tom Jerry.nsp`). Le titre affiché sur l'accueil garde ses accents. Un
+  titre sans aucune lettre latine prend le nom de la ROM, sinon
+  `Forwarder <title id>.nsp`.
 - Chaque essai est écrit dans **`sdmc:/switch/RetroManager/logs/retromanager.log`** :
   - `Forwarder: building <jeu> (...)` au début ;
   - `Forwarder: <jeu> (<title id>) written to sdmc:/nsp/<jeu>.nsp (<taille>)` en cas de succès ;

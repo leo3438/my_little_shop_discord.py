@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 
 #include "retromanager/platform/IFileSystem.hpp"
 
@@ -29,12 +30,17 @@ class LocalFileSystem : public IFileSystem {
     Status removeAll(std::string_view path) override;
     Status rename(std::string_view from, std::string_view to) override;
     Result<std::uint64_t> availableSpace(std::string_view path) override;
+    Status commit() override { return commitHook_ ? commitHook_() : success(); }
+
+    // How commit() reaches the device (set by the Switch platform).
+    void setCommitHook(std::function<Status()> hook) { commitHook_ = std::move(hook); }
 
   private:
     std::filesystem::path toHost(const std::string& normalizedPath) const;
     Status checkParentDirectory(const std::string& normalizedPath) const;
 
     std::filesystem::path root_;
+    std::function<Status()> commitHook_;
 };
 
 }  // namespace rm

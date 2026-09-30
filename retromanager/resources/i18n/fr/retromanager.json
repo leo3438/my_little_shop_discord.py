@@ -207,6 +207,7 @@
         "done": "Raccourci généré dans /nsp/. Veuillez l'installer via DBI ou Tinfoil.",
         "done_details": "Fichier : {}\nCore : {}\nROM : {}\nTitle ID : {}",
         "placeholder_icon": "Pas de jaquette sur la carte : une icône unie a été utilisée.",
+        "warning": "Avertissement : {}",
         "sigpatches": "Les signature patches (sigpatches) doivent être installés pour l'installer et le lancer.",
         "failed": "Raccourci non créé",
         "cancelled": "Création du raccourci annulée",

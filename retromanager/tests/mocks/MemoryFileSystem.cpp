@@ -56,7 +56,7 @@ class MemoryWriteStream : public IWriteStream {
         if (closed_) return makeError(ErrorCode::IoError, "stream already closed");
         closed_ = true;
         fs_.dropStaging(path_);
-        return fs_.commit(path_, std::move(buffer_));
+        return fs_.commitFile(path_, std::move(buffer_));
     }
 
     Status suspend() override {
@@ -226,7 +226,7 @@ void MemoryFileSystem::dropStaging(const std::string& path) {
     nodes_.erase(stagingPath(path));
 }
 
-Status MemoryFileSystem::commit(const std::string& path, std::string data) {
+Status MemoryFileSystem::commitFile(const std::string& path, std::string data) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (Status writable = checkWritable(); !writable) return writable;
     if (Status parent = checkParentDirectory(path); !parent) return parent;

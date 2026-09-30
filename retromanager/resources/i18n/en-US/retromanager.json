@@ -207,6 +207,7 @@
         "done": "Shortcut generated in /nsp/. Please install it with DBI or Tinfoil.",
         "done_details": "File: {}\nCore: {}\nROM: {}\nTitle ID: {}",
         "placeholder_icon": "No box art on the card: a plain icon was used.",
+        "warning": "Warning: {}",
         "sigpatches": "Signature patches (sigpatches) are required to install and launch it.",
         "failed": "Shortcut not created",
         "cancelled": "Shortcut creation cancelled",

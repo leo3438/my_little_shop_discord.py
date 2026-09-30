@@ -105,8 +105,18 @@ std::optional<std::string> ForwarderBuilder::installedCore(const std::string& sy
 }
 
 std::string ForwarderBuilder::outputPathFor(const GameEntry& game) const {
-    auto name = sanitizeFileName(game.title.empty() ? game.fileName : game.title);
-    return layout_.nspDir + "/" + name.valueOr("Forwarder") + ".nsp";
+    // ASCII only: DBI and Tinfoil must list it, whatever the title (the NACP
+    // keeps the real one, accents included, for the HOME menu).
+    std::string name = asciiFileName(game.title);
+    if (name.empty()) {
+        std::string_view rom = game.fileName;
+        name = asciiFileName(rom.substr(0, rom.rfind('.')));
+    }
+    if (name.empty()) {
+        auto rom = RomStore(fs_, layout_).destinationFor(game);
+        name = "Forwarder " + nsp::titleIdHex(nsp::forwarderTitleId(rom ? rom.value() : game.id));
+    }
+    return layout_.nspDir + "/" + name + ".nsp";
 }
 
 ForwarderReport ForwarderBuilder::checkPrerequisites() {
@@ -204,6 +214,9 @@ ForwarderReport ForwarderBuilder::build(const GameEntry& game, const Cancellatio
     const Bytes& bytes = package.value();
     Status written = fs_.writeFile(output, std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     if (!written) return issue(ForwarderIssue::WriteFailed, written.error().describe());
+    // Flush to the card itself before checking it (and before the user
+    // pulls it out to copy the NSP).
+    if (Status committed = fs_.commit(); !committed) report.warning = committed.error().describe();
     // Read the card back: a write can report success and still not land
     // (full or failing SD card), and the user would look for it in vain.
     auto landed = fs_.stat(output);

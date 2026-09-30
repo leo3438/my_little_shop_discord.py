@@ -60,7 +60,7 @@ class MemoryFileSystem : public IFileSystem {
 
     friend class MemoryWriteStream;
 
-    Status commit(const std::string& path, std::string data);
+    Status commitFile(const std::string& path, std::string data);
     Status keepStaging(const std::string& path, std::string data);
     void dropStaging(const std::string& path);
     Status checkWritable() const;
@@ -71,7 +71,7 @@ class MemoryFileSystem : public IFileSystem {
     Range descendants(const std::string& path);
     bool hasChildren(const std::string& path);
 
-    mutable std::recursive_mutex mutex_;  // streams call back into commit()/keepStaging()
+    mutable std::recursive_mutex mutex_;  // streams call back into commitFile()/keepStaging()
     NodeMap nodes_;  // key: normalized virtual path
     bool readOnly_ = false;
     std::function<std::int64_t()> clock_ = [] { return static_cast<std::int64_t>(std::time(nullptr)); };
